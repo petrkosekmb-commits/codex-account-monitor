@@ -1,0 +1,8 @@
+<Project>
+  <Target Name="UseLocalSessionActivity" BeforeTargets="CoreCompile" Condition="'$(MSBuildProjectName)' == 'CodexSwitch.Protocol'">
+    <ItemGroup>
+      <Compile Remove="SessionActivity.cs;$(MSBuildProjectDirectory)/SessionActivity.cs" />
+      <Compile Include="$(MSBuildThisFileDirectory)SessionActivity.cs" />
+    </ItemGroup>
+  </Target>
+</Project>

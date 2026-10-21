@@ -1,0 +1,11 @@
+{
+  "name": "codex-account-monitor",
+  "version": "0.2.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "start": "node app.mjs"
+  },
+  "description": "Local Codex account usage dashboard and manual switch with continuation"
+}

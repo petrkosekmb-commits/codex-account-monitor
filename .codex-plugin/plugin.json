@@ -1,0 +1,21 @@
+{
+  "name": "account-monitor",
+  "version": "0.2.1",
+  "description": "CZ: Místní přehled limitů a ruční přepnutí účtů. EN: Local usage dashboard and manual account switching.",
+  "author": {
+    "name": "Account Monitor contributors"
+  },
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "PĹ™ehled a pĹ™epĂ­nĂˇnĂ­ ĂşÄŤtĹŻ",
+    "shortDescription": "Limity a tlaÄŤĂ­tko pro pĹ™epnutĂ­ s pokraÄŤovĂˇnĂ­m.",
+    "longDescription": "Accounts are configured locally. Chat tools read usage data; manual switching and continuation are initiated from the local dashboard.",
+    "developerName": "Account Monitor contributors",
+    "category": "Productivity",
+    "defaultPrompt": [
+      "UkaĹľ pĹ™ehled mĂ˝ch ÄŤtyĹ™ ĂşÄŤtĹŻ a nejbliĹľĹˇĂ­ oÄŤekĂˇvanĂ© obnovenĂ­ limitu.",
+      "Obnov Ăşdaje o limitech mĂ˝ch ĂşÄŤtĹŻ."
+    ],
+    "brandColor": "#164B4D"
+  }
+}
