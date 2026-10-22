@@ -1,4 +1,6 @@
 param([switch]$BezOtevreni)
+if(-not(Test-Path -LiteralPath (Join-Path $PSScriptRoot 'bridge\publish\CodexSwitch.exe'))){throw 'Chybi sestaveny pomocnik. Nejdriv spustte bridge\Build.ps1. / Build the helper first.'}
+
 $ErrorActionPreference = 'Stop'
 $dataPath = if ($env:ACCOUNT_MONITOR_DATA) { [IO.Path]::GetFullPath($env:ACCOUNT_MONITOR_DATA) } else { Join-Path $env:LOCALAPPDATA 'CodexAccountMonitor' }
 if ($dataPath -match '["\r\n]') { throw 'Invalid data directory.' }

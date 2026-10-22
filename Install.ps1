@@ -1,9 +1,10 @@
+if(-not(Test-Path -LiteralPath (Join-Path $PSScriptRoot 'bridge\publish\CodexSwitch.exe'))){throw 'Chybi sestaveny pomocnik. Nejdriv spustte bridge\Build.ps1. / Build the helper first.'}
 $ErrorActionPreference = 'Stop'
 $catalogRoot = Join-Path $env:LOCALAPPDATA 'CodexAccountMonitorTools'
 $installPath = Join-Path $catalogRoot 'plugins\account-monitor'
 if (Test-Path -LiteralPath $catalogRoot) { throw 'Cil instalace uz existuje; neprepisuji jej.' }
 New-Item -ItemType Directory -Path $installPath -Force | Out-Null
-$entries = @('config.mjs','accounts.example.json','LICENSE','app.mjs','core.mjs','rpc.mjs','server.mjs','switcher.mjs','index.html','package.json','README.md','THIRD_PARTY_NOTICES.md','OVERENI.md','Spustit-prehled.ps1','Spustit-prehled.cmd','.mcp.json','.codex-plugin','scripts','tests')
+$entries = @('config.mjs','accounts.example.json','LICENSE','app.mjs','core.mjs','rpc.mjs','server.mjs','switcher.mjs','switch-flow.mjs','index.html','package.json','README.md','THIRD_PARTY_NOTICES.md','OVERENI.md','Spustit-prehled.ps1','Spustit-prehled.cmd','.mcp.json','.codex-plugin','scripts','tests')
 foreach ($entry in $entries) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $entry) -Destination $installPath -Recurse }
 foreach ($entry in $entries) {
     $sourceItem = Get-Item -LiteralPath (Join-Path $PSScriptRoot $entry)
@@ -14,7 +15,7 @@ foreach ($entry in $entries) {
     }
 }
 New-Item -ItemType Directory -Path (Join-Path $installPath 'bridge') -Force | Out-Null
-foreach($entry in @('Program.cs','AccountSwitchBridge.csproj','Build.ps1','LICENSE-codex-switch.txt','.gitignore','compat','publish')) {
+foreach($entry in @('Program.cs','AccountErrors.cs','DesktopLaunch.cs','AccountSwitchBridge.csproj','Build.ps1','LICENSE-codex-switch.txt','.gitignore','compat','tests','publish')) {
     $from=Join-Path (Join-Path $PSScriptRoot 'bridge') $entry
     if(Test-Path -LiteralPath $from){Copy-Item -LiteralPath $from -Destination (Join-Path $installPath 'bridge') -Recurse}
 }

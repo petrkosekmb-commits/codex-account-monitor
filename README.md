@@ -1,4 +1,4 @@
-# Codex Account Monitor
+# Codex Account Monitor 0.2.3
 
 **CZ:** Místní přehled limitů čtyř účtů Codexu a ruční přepnutí s pokračováním v rozpracovaném chatu.
 
@@ -42,7 +42,7 @@ notepad $accountsPath
 .\Install.ps1
 ```
 
-Sestavení ověří SHA256 připnutých zdrojů projektu codex-switch a vytvoří vlastní kontrolní součty knihoven. Binární soubory nejsou součástí tohoto repozitáře.
+Sestavení ověří SHA256 připnutých zdrojů projektu codex-switch, spustí regresní kontroly a vytvoří vlastní kontrolní součty knihoven. Binární soubory nejsou součástí tohoto repozitáře.
 
 5. Spusťte `Spustit-prehled.cmd` nebo `Spustit-prehled.ps1`. Přehled běží na **http://127.0.0.1:55163**. U každého účtu dokončete vlastní oficiální přihlášení přes tlačítko **Připojit účet**. Potom vyberte chat a cílový účet tlačítkem **Přepnout a pokračovat**.
 
@@ -87,7 +87,7 @@ This repository contains example addresses and source code only. Configuration, 
 
 The MCP tools `account_overview` and `refresh_limits` do not switch the desktop account or send continuation messages. Switching is initiated by a manual dashboard action.
 
-A private predecessor was tested through a real account transition, desktop restart, and continuation in the same local chat. This public edition replaces embedded account addresses with local configuration. Its configuration, dashboard, and protocol changes have synthetic tests; the generalized public edition has not been tested across every account combination or Codex release. See [validation notes](OVERENI.md).
+The shared switching implementation was validated in a private installation across all 12 directions between four accounts, including account identity, preserved chat title, and a new continuation message. Public configuration and isolation are tested separately; no private account data or test history is distributed. This public edition replaces embedded account addresses with local configuration. Its configuration, dashboard, and protocol changes have synthetic tests; the generalized public edition has not been tested across every account combination or Codex release. See [validation notes](OVERENI.md).
 
 ## Development and license
 

@@ -1,27 +1,27 @@
-# Ověření / Validation
+# Ověření verze 0.2.3 / Validation
 
 ## Česky
 
-Před zveřejněním prošlo 21 testů aplikace, 6 syntetických regresních kontrol parseru a sestavení pomocníka pro Windows. Integrační test přehledu používá výhradně náhradní CLI a ukázkové účty; nečte skutečné přihlášení. Kontrola souborů pro publikaci povoluje pouze zkontrolované zdroje a e-mailové příklady na doméně `example.com`.
+Veřejná verze používá pouze ukázkové adresy `example.com`. Vlastní seznam účtů musí uživatel vytvořit místně v `%LOCALAPPDATA%\CodexAccountMonitor\accounts.json` a každý účet přihlásit oficiálním postupem. Součástí repozitáře ani zdrojového balíčku nejsou hesla, tokeny, přihlášení, šifrovaný trezor, konfigurace konkrétních účtů, soukromé protokoly ani historie chatů.
 
-Soukromý předchůdce této aplikace prošel skutečným přepnutím mezi dvěma účty, novým otevřením Codexu a automatickým pokračováním ve stejném chatu. Při testu se opravilo ukončení pomocníka společně s Codexem i nesprávné řazení starších stavových snímků. Přechod skončil jako `Finished` bez nedokončeného přechodu. Veřejná kopie neobsahuje adresy, identifikátory chatů, osobní cesty ani záznamy tohoto testu.
+Verze 0.2.3 přenáší opravy prvního otevření původního chatu, čtení kanonické historie, aktualizace aktivního účtu po částečném selhání a čekání hostitele pouze na monitor místo celého stromu potomků. Přidává bezpečné české hlášky přihlášení a povinné regresní kontroly při sestavení. Opravená je také diakritika manifestu pluginu.
 
-Veřejná verze přidává místní konfiguraci čtyř účtů a samostatnou výchozí datovou složku a port. Syntetické testy kontrolují limity, čerstvost údajů, izolaci konfigurace, validaci adres, obsluhu tlačítka a řazení snímků při změně revizí. Živé přepnutí s novou konfigurovatelnou verzí není vydáváno za ověřené jen na základě testu soukromého předchůdce.
+Místní kontrola veřejných zdrojů: **32 testů Node**, včetně konfigurace, izolovaného HTTP serveru, odmítnutí cizího původu, chybějícího oprávnění a neplatného cíle, duplicitního startu, obnovy monitoru, neopakování nejasného požadavku a kontroly souborů distribuce. Integrační testy používají pouze syntetické účty a náhradní nebo nedostupné CLI. Nečtou skutečné přihlášení ani nepřepínají skutečný účet.
 
-Nejsou ověřené všechny směry přepínání, další verze Codexu ani dlouhodobé chování při změnách interního desktopového protokolu. Při nejasném výsledku pokračování aplikace požadavek sama neopakuje. Systémem blokovaná hardwarová knihovna původního projektu není součástí pomocníka.
+Pomocník se sestavil pro Windows x64 na .NET SDK 10.0.402 a prošel **18 regresními kontrolami** revizí, aktuálního schválení, kanonické historie, prvního spuštění chatu a bezpečných chybových hlášek.
+
+Sdílená logika přepínání prošla v soukromé instalaci živým ověřením všech **12 směrů mezi čtyřmi účty**. U každého se ověřila cílová identita, zachovaný název, nové pokračování ve stejném chatu, dokončený přechod a spojení s desktopem. Záznamy ani údaje těchto účtů se sem nekopírují. Veřejná místní konfigurace se ověřuje samostatnými syntetickými testy; veřejné vydání se nevydává za nové živé přihlášení provedené za budoucího uživatele.
+
+Veřejná kopie má oddělenou datovou složku, katalog a výchozí port **55163**. Soukromou instalaci neinstaluje, nečte její konfiguraci a nepřepisuje ji. Po vlastní instalaci ovládá místní Codex přihlášeného uživatele; při ručním přepnutí ovlivní jeho okna a klienty sdílející stejné přihlášení.
+
+Distribuce používá výslovný seznam `distribution-files.json`. Test povoluje pouze ukázkové e-mailové domény, odmítá provozní a autentizační soubory a známé vzory přístupových klíčů. Kontrola seznamu nenahrazuje posouzení změn před zveřejněním. Aktuální i předchozí veřejné revize byly navíc zkontrolovány na osobní adresy a skutečné přístupové údaje.
+
+Budoucí verze desktopového protokolu, dlouhodobá platnost přihlášení a dostupnost služby nejsou zaručené. Přepnutí zůstává ruční a nejistý výsledek pokračování se automaticky neopakuje. Systémem blokovaná hardwarová knihovna upstream projektu není součástí pomocníka.
 
 ## English
 
-Before publication, 21 application tests, 6 synthetic parser regressions, and the Windows helper build passed. The dashboard integration test uses a replacement CLI and example accounts only; it does not read real authentication. Publication checks admit only reviewed source files and email examples under `example.com`.
+Version 0.2.3 includes the corrected cold launch of the original chat, canonical turn history, account reconciliation after partial failure, and monitor host recovery without waiting for descendant processes. The public package contains example addresses and reviewed sources only. Each user provides a local account list and completes their own official login; credentials, account vaults, private configuration, chat histories, and private test records are excluded.
 
-A private predecessor completed a real two-account switch, desktop restart, and automatic continuation in the same local chat. Testing uncovered and fixed the helper being terminated with Codex and incorrect ordering of older desktop-state snapshots. The handoff finished without a pending transition. This public copy contains no account addresses, chat identifiers, personal paths, or private test records from that run.
+Validation: **32 Node tests** using synthetic accounts and isolated or replacement CLI processes, plus a successful Windows x64 build and **18 .NET regression checks**. The shared switching logic was separately verified in a private installation across all **12 directed transitions between four accounts**. The configurable public edition is not claimed to have authenticated or switched accounts on behalf of a future user.
 
-The public edition introduces local four-account configuration and separate default data and port settings. Synthetic tests cover usage rules, freshness, configuration isolation, address validation, dashboard actions, and snapshot ordering across revision resets. A live switch with the generalized public configuration has not been validated merely by the predecessor's successful test.
-
-Not all switching directions, Codex releases, or long-term internal protocol changes have been tested. Uncertain continuation messages are not automatically retried. Hardware-monitoring assemblies from the upstream project are not included.
-
-Obnova po ukončení / Process recovery: přehled používá uživatelský přihlašovací spouštěč a až tři pokusy o opětovné spuštění po chybě. The monitor starts at user sign-in and retries after process failures; account switching remains manual. A synthetic dashboard test verifies recovery from a stale local authorization key.
-
-CZ: Obnova byla živě ověřena na místní instalaci řízeným ukončením procesu: nový proces se sám spustil, připojil ke Codexu a zachoval účet. Hostitel opakuje start nejvýše třikrát po třech sekundách, úloha Windows obnovuje hostitele po jedné minutě. Izolovaný test ověřuje duplicitní spuštění a start po neuklizeném zámku ukončeného procesu.
-
-EN: Process recovery was verified on the local installation by terminating the monitor: a new process started automatically, reconnected to Codex, and preserved the account. The host retries up to three times after three seconds; Windows retries a failed host after one minute. An isolated test covers verified duplicate runs and restart with a stale lock left by a terminated process.
+The public edition uses its separate local data folder, catalog, and default port **55163**. Distribution is restricted to `distribution-files.json`; a regression check rejects non-example email domains, runtime authentication files, and known credential patterns. Real switching affects the installing user's local Codex clients sharing the same login. Future internal protocol changes and uninterrupted service availability are not guaranteed.

@@ -97,6 +97,16 @@ internal sealed class SessionActivityLedger
                 var hasGoal = state.TryGetProperty("threadGoal", out var goal);
                 var goalStatus = hasGoal ? ReadGoal(goal) : null;
                 var last = state.TryGetProperty("turns", out var turns) && turns.ValueKind == JsonValueKind.Array ? turns.EnumerateArray().LastOrDefault() : default;
+                if(state.TryGetProperty("turnHistory",out var turnHistory)&&turnHistory.TryGetProperty("history",out var history)&&
+                    history.TryGetProperty("entitiesByKey",out var entities)&&entities.ValueKind==JsonValueKind.Object)
+                {
+                    foreach(var entity in entities.EnumerateObject())
+                    {
+                        var candidate=entity.Value;
+                        if(candidate.ValueKind!=JsonValueKind.Object||JsonValue.String(candidate,"turnId")==null)continue;
+                        if(last.ValueKind!=JsonValueKind.Object||(JsonValue.Long(candidate,"turnStartedAtMs")??0)>=(JsonValue.Long(last,"turnStartedAtMs")??0))last=candidate;
+                    }
+                }
                 _entries[id] = new(owner, revision, ReadStatus(status), IsWaiting(status),
                     JsonValue.String(state, "parentThreadId") != null || JsonValue.Bool(state, "sideConversation") == true,
                     hasGoal && (goal.ValueKind == JsonValueKind.Null || goalStatus != null), goalStatus,
@@ -119,6 +129,10 @@ internal sealed class SessionActivityLedger
                 if (path.Length == 0) { _entries[id] = entry with { Status = null }; return true; }
                 if (path[0].ValueKind != JsonValueKind.String) continue;
                 var key = path[0].GetString();
+                // Canonical paginated history replaces entities and islands rather
+                // than the legacy turns array. Re-read a full snapshot so turn IDs
+                // and completion state cannot silently stay stale.
+                if(key=="turnHistory") { _entries[id]=entry with {Status=null}; return true; }
                 if (key == "updatedAt" && path.Length == 1 && JsonValue.String(patch, "op") != "remove")
                 {
                     var updatedAt = patch.GetProperty("value").GetInt64();

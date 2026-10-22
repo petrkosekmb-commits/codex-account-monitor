@@ -1,6 +1,7 @@
 using CodexAccountDesk;
 using System.Text;
 using System.Text.Json;
+using System.Diagnostics;
 
 // Small local host for the upstream account/session libraries. No hardware/UI assemblies.
 internal static class Program
@@ -41,7 +42,7 @@ internal static class Program
     private static object Status()
     {
         var accounts=Service.Accounts.Where(a=>AllowedEmail(a.Email)).Select(a=>new {
-            email=a.Email, plan=a.Plan, current=a.IsCurrent, error=a.Error==null?null:"Účet se nepodařilo ověřit.",
+            email=a.Email, plan=a.Plan, current=a.IsCurrent, error=AccountErrors.Describe(a.Error),
             checkedAt=a.Usage?.CheckedAt.ToUnixTimeMilliseconds(),
             raw=a.Usage==null?null:new {
                 ordinaryUsageAllowed=a.Usage.OrdinaryUsageAllowed,
@@ -55,10 +56,10 @@ internal static class Program
         }).ToArray();
         var pending=Vault.Data.PendingSwitch;
         return new { ready=Ready, accounts, desktop=Sessions.Current.Available,
-            threads=Sessions.Threads.Select(t=>new {t.Id,t.Title,t.Status,t.Waiting,t.Goal,t.LastTurnStatus}),
+            threads=Sessions.Threads.Select(t=>new {t.Id,t.Title,t.Status,t.Waiting,t.Goal,t.ResumeState,t.LastTurnId,t.LastTurnStatus}),
             pending=pending==null?null:new { pending.Id, targetEmail=Service.Accounts.SingleOrDefault(a=>a.Key==pending.TargetAccountKey)?.Email,phase=pending.Phase.ToString(), pending.AccountApplied,
                 error=pending.Error==null?null:"Přepnutí nebylo dokončeno. Před opakováním zkontroluj stav.",
-                chats=pending.Chats.Select(c=>new {c.Id,state=c.ResumeState.ToString()}) }
+                chats=pending.Chats.Select(c=>new {c.Id,state=c.ResumeState.ToString(),error=c.Error}) }
         };
     }
     public static async Task<int> Main(string[] args)
@@ -117,7 +118,7 @@ internal static class Program
                 var coordinator=new AccountSwitchCoordinator(backend,
                     plan=>{lock(Vault.SyncRoot){Vault.Data.PendingSwitch=plan;Vault.Save();}},
                     plan=>Send(new{notification="switchProgress",phase=plan.Phase.ToString(),accountApplied=plan.AccountApplied}),
-                    _=>"Operace přepnutí selhala; případný neověřený požadavek na pokračování neopakuj naslepo.");
+                    e=>e is TimeoutException?"Codex včas nepotvrdil otevření chatu. Pokračování nebylo ověřené.":"Operace přepnutí selhala; případný neověřený požadavek na pokračování neopakuj naslepo.");
                 var plan=method=="resume"?Vault.Data.PendingSwitch:await coordinator.PrepareAsync(target.Key,DateTimeOffset.UtcNow,ct);
                 if(plan==null||plan.TargetAccountKey!=target.Key)throw new InvalidOperationException();
                 if(!await coordinator.RunAsync(plan,ct))throw new IncompleteSwitchException();
@@ -151,9 +152,9 @@ internal static class Program
 internal sealed class PreservingBackend:IAccountSwitchBackend
 {
     private readonly AccountService Service;private readonly DesktopSessionMonitor Sessions;private readonly DesktopSwitchBackend Backend;
-    private readonly string? Selected;private CodexRpc? Metadata;
+    private readonly string? Selected;private readonly string Target;private CodexRpc? Metadata;
     public PreservingBackend(AccountService service,DesktopSessionMonitor sessions,string target,string? selected)
-    {Service=service;Sessions=sessions;Selected=selected;Backend=new(service,sessions,target);}
+    {Service=service;Sessions=sessions;Selected=selected;Target=target;Backend=new(service,sessions,target);}
     public Task<string?> CurrentAccountAsync(CancellationToken c)=>Backend.CurrentAccountAsync(c);
     public async Task<SwitchChat[]> CaptureAsync(CancellationToken c)
     {
@@ -179,7 +180,41 @@ internal sealed class PreservingBackend:IAccountSwitchBackend
     }
     public async Task CloseDesktopAsync(CancellationToken c){if(Metadata!=null){await Metadata.DisposeAsync();Metadata=null;}await Backend.CloseDesktopAsync(c);}
     public Task ApplyAccountAsync(string key,string? source,CancellationToken c)=>Backend.ApplyAccountAsync(key,source,c);
-    public Task LaunchDesktopAsync(CancellationToken c)=>Backend.LaunchDesktopAsync(c);
-    public Task<ChatResumeState> ResumeAsync(SwitchChat chat,Action sending,CancellationToken c)=>Backend.ResumeAsync(chat,sending,c);
+    public async Task LaunchDesktopAsync(CancellationToken c)
+    {
+        if(OperatingSystem.IsWindows()&&!RuntimeLocator.IsDesktopRunning(Service.Installation.DesktopPath))
+        {
+            string? firstChat;
+            lock(Service.Vault.SyncRoot)firstChat=Service.Vault.Data.PendingSwitch?.Chats.FirstOrDefault()?.Id;
+            // Deliver the route in the initial launch. A second process can arrive
+            // before the new desktop has registered its window/deep-link handler.
+            Process.Start(DesktopLaunch.Create(Service.Installation.DesktopPath,firstChat))?.Dispose();
+            await Sessions.WaitForDiscoveryAsync(c);
+            return;
+        }
+        await Backend.LaunchDesktopAsync(c);
+    }
+    public async Task<ChatResumeState> ResumeAsync(SwitchChat chat,Action sending,CancellationToken c)
+    {
+        if(!OperatingSystem.IsWindows())return await Backend.ResumeAsync(chat,sending,c);
+        if(await CurrentAccountAsync(c)!=Target)throw new InvalidOperationException("Aktivní účet se změnil.");
+        var thread=Sessions.Threads.FirstOrDefault(t=>t.Id==chat.Id&&t.ResumeState=="resumed"&&t.Status is "idle" or "active");
+        if(thread==null)Process.Start(DesktopLaunch.Create(Service.Installation.DesktopPath,chat.Id))?.Dispose();
+        var deadline=DateTimeOffset.UtcNow.AddSeconds(90);
+        while(thread==null&&DateTimeOffset.UtcNow<deadline)
+        {
+            await Task.Delay(200,c);
+            thread=Sessions.Threads.FirstOrDefault(t=>t.Id==chat.Id&&t.ResumeState=="resumed"&&t.Status is "idle" or "active");
+        }
+        if(thread==null)throw new TimeoutException("Codex nepotvrdil otevření chatu.");
+        if(thread.Waiting)throw new InvalidOperationException("Chat čeká na schválení nebo odpověď.");
+        if(SwitchContinuation.Decide(chat,thread) is ChatResumeState settled)return settled;
+        if(await CurrentAccountAsync(c)!=Target)throw new InvalidOperationException("Aktivní účet se změnil.");
+        sending();
+        var result=await Sessions.SendToOwnerAsync(thread,"thread-follower-start-turn",SwitchContinuation.StartParameters(chat),2,c);
+        var turn=result.GetProperty("result").GetProperty("turn");
+        if(string.IsNullOrEmpty(JsonValue.String(turn,"id")))throw new InvalidDataException("Pokračování chatu nebylo potvrzené.");
+        return ChatResumeState.Resumed;
+    }
     public async ValueTask DisposeAsync(){if(Metadata!=null)await Metadata.DisposeAsync();await Backend.DisposeAsync();}
 }

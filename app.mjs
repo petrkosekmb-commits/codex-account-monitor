@@ -8,6 +8,7 @@ import {initialState,record,sameEmail,view} from './core.mjs';
 import {Rpc} from './rpc.mjs';
 import {Switcher,bridgeInstalled} from './switcher.mjs';
 import {readAccountConfig} from './config.mjs';
+import {runSwitch} from './switch-flow.mjs';
 const ROOT=dirname(fileURLToPath(import.meta.url));
 const DATA=process.env.ACCOUNT_MONITOR_DATA||join(process.env.LOCALAPPDATA||process.env.USERPROFILE,'CodexAccountMonitor');
 const accounts=await readAccountConfig(join(DATA,'accounts.json'));
@@ -125,11 +126,13 @@ function publicView(){const result=view(state);result.activeError=state.activeEr
 async function switchAccount(id,threadId,resume=false){
   if(!switcher||!switcherView?.ready||switching||busy||login?.bridge||login?.rpc)throw new Error('Přepínač není připravený nebo právě probíhá jiná operace.');
   const slot=state.slots.find(s=>s.id===id);if(!slot?.connected)throw new Error('Nejdřív jednou přihlas vybraný účet.');
-  switching=true;busy=true;state.lastSwitch={id,requestedAt:Date.now(),status:'requested',phase:'Preparing'};
+  switching=true;busy=true;
   try{
-    await save();switcherView=await switcher.request(resume?'resume':'switch',{email:slot.email,threadId},4*60*1000);applySwitcherView();
-    state.lastSwitch={...state.lastSwitch,status:'complete',phase:'Finished'};switcherError=null;
-  }catch(e){state.lastSwitch={...state.lastSwitch,status:'error',error:e.message};try{switcherView=await switcher.request('status',{},10000);}catch{}}
+    const result=await runSwitch({state,id,threadId,resume,save,
+      request:(method,selected)=>switcher.request(method,method==='status'?{}:{email:slot.email,threadId:selected},method==='status'?10000:4*60*1000),
+      apply:result=>{switcherView=result;applySwitcherView();}});
+    if(result.ok)switcherError=null;
+  }
   finally{busy=false;switching=false;await save();}
 }
 const html=(await readFile(join(ROOT,'index.html'),'utf8')).replace('__MONITOR_KEY__',key);

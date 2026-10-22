@@ -13,6 +13,8 @@ if(-not $UpstreamRoot){
 }
 & $Dotnet publish (Join-Path $PSScriptRoot 'AccountSwitchBridge.csproj') -c Release -r win-x64 --self-contained true ('-p:UpstreamRoot='+$UpstreamRoot) ('-p:CustomBeforeMicrosoftCommonTargets='+(Join-Path $PSScriptRoot 'compat\ProtocolOverride.targets')) -p:UseSharedCompilation=false -o (Join-Path $PSScriptRoot 'publish')
 if($LASTEXITCODE -ne 0){throw 'Sestaveni pomocnika selhalo.'}
+& $Dotnet run --project (Join-Path $PSScriptRoot 'tests\ProtocolRegression.csproj') -c Release ('-p:UpstreamRoot='+$UpstreamRoot) ('-p:CustomBeforeMicrosoftCommonTargets='+(Join-Path $PSScriptRoot 'compat\ProtocolOverride.targets')) -p:UseSharedCompilation=false
+if($LASTEXITCODE -ne 0){throw 'Regresni testy pomocnika selhaly; balicek neni pripraveny k vydani.'}
 $publishRoot=Join-Path $PSScriptRoot 'publish'
 Copy-Item -LiteralPath (Join-Path $UpstreamRoot 'LICENSE') -Destination (Join-Path $publishRoot 'LICENSE-codex-switch.txt')
 $integrity=@{}

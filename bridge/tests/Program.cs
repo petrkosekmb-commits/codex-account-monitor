@@ -27,4 +27,29 @@ ledger.Apply("chat","owner",patch);
 Check(!ledger.Threads().Single().Waiting,"current patch clears resolved approval");
 var legacy=Ledger();legacy.Apply("chat","owner",Snapshot(20,null,true));legacy.Apply("chat","owner",Snapshot(19,null,false));
 Check(legacy.Threads().Single().Waiting,"missing timestamps preserve original monotonic revision guard");
-Console.WriteLine("6 regression checks passed");
+var paginated=Ledger();
+var canonical=JsonSerializer.SerializeToElement(new {type="snapshot",revision=1,conversationState=new {
+    threadRuntimeStatus=new {type="idle"},turns=Array.Empty<object>(),threadGoal=(object?)null,
+    turnHistory=new {kind="canonical",history=new {entitiesByKey=new Dictionary<string,object>{
+        ["turn:older"]=new {turnId="older",status="completed",turnStartedAtMs=100L},
+        ["tail:newer"]=new {turnId="newer",status="interrupted",turnStartedAtMs=200L}
+    }}}
+}});
+paginated.Apply("chat","owner",canonical);
+Check(paginated.Threads().Single().LastTurnId=="newer","canonical history selects latest turn rather than empty legacy array");
+Check(paginated.Threads().Single().LastTurnStatus=="interrupted","canonical interrupted status is preserved");
+var historyPatch=JsonSerializer.SerializeToElement(new {type="patches",revision=2,baseRevision=1,patches=new[]{new {op="replace",path=new[]{"turnHistory","history","entitiesByKey","tail:newer","status"},value="completed"}}});
+Check(paginated.Apply("chat","owner",historyPatch),"canonical history update requests a fresh snapshot");
+Check(!paginated.Read().Available,"incomplete history refresh cannot report ready");
+var exe=Environment.ProcessPath!;
+var launch=DesktopLaunch.Create(exe,"00000000-0000-0000-0000-000000000001");
+Check(launch.ArgumentList.SequenceEqual(new[]{"--single-argument","codex://threads/00000000-0000-0000-0000-000000000001"}),"cold launch carries the exact thread URL as one argument");
+Check(!launch.UseShellExecute,"desktop launch avoids shell command parsing");
+var rejected=false;try{DesktopLaunch.Create(exe,"bad\" --argument");}catch(InvalidDataException){rejected=true;}
+Check(rejected,"invalid thread identifiers cannot become launch arguments");
+Check(AccountErrors.Describe(null)==null,"successful account has no error");
+Check(AccountErrors.Describe(AccountErrors.Expired)!.Contains("Přihlášení vypršelo"),"expired login has a Czech actionable message");
+Check(AccountErrors.Describe(AccountErrors.InvalidFormat)!.Contains("neplatný formát"),"invalid response format has a fixed message");
+Check(AccountErrors.Describe(AccountErrors.Connection)!.Contains("připojení"),"usage connection failure is distinct from expired login");
+Check(!AccountErrors.Describe("access_token=synthetic-secret")!.Contains("synthetic-secret"),"unknown errors never expose raw secret-bearing messages");
+Console.WriteLine("18 regression checks passed");

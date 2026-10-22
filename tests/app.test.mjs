@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,copyFile,mkdir,writeFile,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {join,resolve,sep} from 'node:path';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import net from 'node:net';
@@ -12,7 +12,7 @@ test('dashboard uses isolated configured accounts and rejects unauthorized reque
   const root=await mkdtemp(join(tmpdir(),'account-monitor-app-'));
   let child;
   try{
-    for(const name of ['app.mjs','core.mjs','config.mjs','rpc.mjs','switcher.mjs','index.html'])
+    for(const name of ['app.mjs','core.mjs','config.mjs','rpc.mjs','switcher.mjs','switch-flow.mjs','index.html'])
       await copyFile(new URL('../'+name,import.meta.url),join(root,name));
     const data=join(root,'local-data');await mkdir(data);
     await writeFile(join(data,'accounts.json'),JSON.stringify({accounts:EXAMPLE_EMAILS}));
@@ -53,6 +53,7 @@ test('dashboard uses isolated configured accounts and rejects unauthorized reque
 
   }finally{
     if(child&&child.exitCode===null){const exited=once(child,'exit');child.kill();await exited;}
-    await rm(root,{recursive:true,force:true});
+    const absolute=resolve(root);if(!absolute.startsWith(resolve(tmpdir())+sep)||!absolute.split(sep).at(-1).startsWith('account-monitor-app-'))throw new Error('Unsafe test cleanup');
+    await rm(absolute,{recursive:true,force:true,maxRetries:20,retryDelay:100});
   }
 });
