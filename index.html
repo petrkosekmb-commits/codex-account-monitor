@@ -6,12 +6,20 @@
 <div class="summary"><strong id="next">Načítám stav účtů…</strong><p id="nextdetail"></p></div><div id="switcher" class="card" style="margin-bottom:20px"></div><div id="login"></div><div id="cards" class="grid"></div>
 <p class="footer">Kontrola běží každých 5 minut, dokud je místní přehled spuštěný a počítač zapnutý. Starší údaje po 10 minutách vyžadují ověření. Čas obnovení hlásí služba; po jeho uplynutí dostupnost znovu ověřujeme. Historie zaznamenává čas zjištění vyčerpání, nikoli přesný okamžik jeho vzniku. Samostatné limity jednotlivých modelů zde nejsou porovnávané.</p><p id="error" class="error"></p></main>
 <script>
-const KEY='__MONITOR_KEY__';let state,selectedThread='',actionError='';
+let KEY='__MONITOR_KEY__';let state,selectedThread='',actionError='';
 const $=id=>document.getElementById(id);const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const date=t=>t?new Intl.DateTimeFormat('cs-CZ',{timeZone:'Europe/Prague',day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'}).format(t):'Neznámý čas';
 const ago=t=>{const min=Math.max(0,Math.floor((Date.now()-t)/60000));return min===0?'právě teď':`před ${min} min`;};
 const duration=m=>m===10080?'Týdenní limit':m===300?'Pětihodinový limit':m?`Limit za ${m} min`:'Limit';
-async function api(path,method='GET',data){const r=await fetch('/api/'+path,{method,headers:{'X-Monitor-Key':KEY,'Content-Type':'application/json'},body:data?JSON.stringify(data):undefined});const v=await r.json();if(!r.ok)throw new Error(v.error);return v;}
+async function api(path,method='GET',data){
+  const request=()=>fetch('/api/'+path,{method,headers:{'X-Monitor-Key':KEY,'Content-Type':'application/json'},body:data?JSON.stringify(data):undefined});
+  let r=await request();
+  if(r.status===403){
+    const page=await fetch('/',{cache:'no-store'});
+    if(page.ok){const fresh=(await page.text()).match(/let KEY='([a-f0-9]{64})'/);if(fresh&&fresh[1]!==KEY){KEY=fresh[1];r=await request();}}
+  }
+  const v=await r.json();if(!r.ok)throw new Error(v.error);return v;
+}
 async function update(){try{state=await api('state');draw();$('error').textContent=actionError;}catch{$('error').textContent='Spojení s přehledem selhalo. Obnov tuto stránku klávesou F5.';}}
 function draw(){
   $('refresh').disabled=state.refreshing||!!state.login?.url;$('refresh').textContent=state.refreshing?'Kontroluji…':'Obnovit údaje';

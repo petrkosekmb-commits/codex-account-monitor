@@ -38,6 +38,19 @@ test('dashboard uses isolated configured accounts and rejects unauthorized reque
     assert.equal(state.activeEmail,EXAMPLE_EMAILS[0]);
     assert.equal(state.slots[0].snapshot.limits.windows[0].used,10);
     assert.equal(state.switcher.installed,false);
+    const spawnMonitor=()=>spawn(process.execPath,[join(root,'app.mjs')],{cwd:root,windowsHide:true,env:{...process.env,ACCOUNT_MONITOR_DATA:data,ACCOUNT_MONITOR_PORT:String(port),ACCOUNT_MONITOR_CODEX:process.execPath},stdio:'ignore'});
+    const duplicate=spawnMonitor();const [duplicateExit]=await once(duplicate,'exit');
+    assert.equal(duplicateExit,0,'duplicate succeeds only while the first dashboard responds');
+    const originalPid=child.pid;const stopped=once(child,'exit');child.kill();await stopped;
+    child=spawnMonitor();
+    for(let i=0;i<100;i++){
+      const next=JSON.parse(await readFile(join(data,'runtime.json'),'utf8'));
+      if(next.pid!==originalPid){runtime=next;break;}
+      await new Promise(resolve=>setTimeout(resolve,50));
+    }
+    assert.notEqual(runtime.pid,originalPid,'stale lock from terminated process is recovered');
+    assert.equal((await fetch(runtime.url+'/api/state',{headers:{'X-Monitor-Key':runtime.key}})).status,200);
+
   }finally{
     if(child&&child.exitCode===null){const exited=once(child,'exit');child.kill();await exited;}
     await rm(root,{recursive:true,force:true});

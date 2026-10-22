@@ -41,3 +41,17 @@ test('tlačítko odešle účet a chat, chyba přežije pravidelnou obnovu',asyn
   assert.deepEqual(JSON.parse(request.options.body),{id:3,threadId:'00000000-0000-0000-0000-000000000001'});
   await d.ready();assert.equal(d.elements.get('error').textContent,'Ověřovací chyba');
 });
+test('otevřená stránka obnoví oprávnění po restartu přehledu',async()=>{
+  const d=dashboard();await d.ready();
+  const original=d.context.fetch;const fresh='a'.repeat(64);let stateCalls=0,reads=0;
+  d.context.fetch=async(url,options)=>{
+    if(url==='/'){reads++;return {ok:true,text:async()=>`let KEY='${fresh}';`};}
+    if(url==='/api/state'&&stateCalls++===0)return {ok:false,status:403,json:async()=>({error:'Chybí místní oprávnění.'})};
+    assert.equal(options.headers['X-Monitor-Key'],fresh);
+    return original(url,options);
+  };
+  await d.ready();
+  assert.equal(reads,1);assert.equal(stateCalls,2);
+  assert.equal(d.elements.get('error').textContent,'');
+  assert.equal(vm.runInContext('KEY',d.context),fresh);
+});

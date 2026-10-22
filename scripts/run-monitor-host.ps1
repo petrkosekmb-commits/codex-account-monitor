@@ -8,5 +8,11 @@ $monitorNode = Join-Path $env:USERPROFILE '.cache\codex-runtimes\codex-primary-r
 if (-not (Test-Path -LiteralPath $monitorNode)) { $monitorNode = (Get-Command node -ErrorAction Stop).Source }
 New-Item -ItemType Directory -Path $monitorData -Force | Out-Null
 Set-Location -LiteralPath $monitorRoot
-& $monitorNode (Join-Path $monitorRoot 'app.mjs') 1> (Join-Path $monitorData 'startup.log') 2> (Join-Path $monitorData 'startup-error.log')
-exit $LASTEXITCODE
+for ($monitorAttempt=0; $monitorAttempt -le 3; $monitorAttempt++) {
+    $monitorProcess=Start-Process -FilePath $monitorNode -ArgumentList @('"'+(Join-Path $monitorRoot 'app.mjs')+'"') -WorkingDirectory $monitorRoot -WindowStyle Hidden -RedirectStandardOutput (Join-Path $monitorData 'startup.log') -RedirectStandardError (Join-Path $monitorData 'startup-error.log') -Wait -PassThru
+    $monitorExit=$monitorProcess.ExitCode
+    [IO.File]::WriteAllText((Join-Path $monitorData 'host-status.json'),(@{lastExitCode=$monitorExit;retry=$monitorAttempt;at=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()} | ConvertTo-Json),[Text.UTF8Encoding]::new($false))
+    if ($monitorExit -eq 0) { exit 0 }
+    if ($monitorAttempt -lt 3) { Start-Sleep -Seconds 3 }
+}
+exit $monitorExit

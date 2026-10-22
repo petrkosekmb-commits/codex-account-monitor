@@ -46,7 +46,7 @@ Sestavení ověří SHA256 připnutých zdrojů projektu codex-switch a vytvoř�
 
 5. Spusťte `Spustit-prehled.cmd` nebo `Spustit-prehled.ps1`. Přehled běží na **http://127.0.0.1:55163**. U každého účtu dokončete vlastní oficiální přihlášení přes tlačítko **Připojit účet**. Potom vyberte chat a cílový účet tlačítkem **Přepnout a pokračovat**.
 
-Přehled běží v ručně spouštěné úloze Windows `Codex Account Monitor - manual public`, aby přežil zavření Codexu. Úloha nemá časový ani přihlašovací spouštěč, neukládá heslo a nepoužívá zvýšená práva. Je určená pro jednu přihlášenou uživatelskou relaci. Po uspání či vypnutí počítače se dostupnost neověřuje.
+Přehled běží v samostatné úloze Windows `Codex Account Monitor - manual public`, aby přežil zavření Codexu. Spouští se po přihlášení daného uživatele do Windows; hostitel po chybě zkusí až třikrát nový proces s odstupem tří sekund a úloha Windows až třikrát nový běh hostitele po jedné minutě. Neukládá heslo a nepoužívá zvýšená práva. Automaticky se spouští pouze přehled, přepnutí účtu zůstává ruční. Už otevřená stránka po restartu přehledu sama obnoví místní oprávnění. Po uspání či vypnutí počítače se dostupnost neověřuje.
 
 ### Soukromí a nastavení
 
@@ -77,7 +77,7 @@ Requirements: Windows, Codex desktop and its local CLI, Node.js 20+, PowerShell 
 3. Run `bridge/Build.ps1` to build the helper. It verifies the pinned upstream archive before building. Run `Install.ps1` for local plugin installation, then `Spustit-prehled.cmd` or `Spustit-prehled.ps1` to start the dashboard.
 4. Open **http://127.0.0.1:55163**. Connect each account through its own official browser login. Select an unfinished chat and use **Přepnout a pokračovat** on the target account.
 
-An on-demand Windows task hosts the monitor outside Codex's process tree so that it survives the desktop restart. It has no time or login trigger, stores no password, and runs with ordinary interactive-user privileges. Logging out of Windows or shutting down the computer stops monitoring.
+A Windows task hosts the monitor outside Codex's process tree so it survives the desktop restart. It starts when its user signs in to Windows and retries a failed monitor process up to three times at three-second intervals; Windows retries a failed host up to three times at one-minute intervals. It stores no password and runs with ordinary interactive-user privileges. Only monitoring starts automatically; account switching remains manual. An already open dashboard recovers its local authorization after a monitor restart. Logging out or shutting down stops monitoring until the next sign-in.
 
 `ACCOUNT_MONITOR_DATA` changes the data directory; `ACCOUNT_MONITOR_PORT` changes the loopback port. Set them consistently for the dashboard launcher and MCP client. `ACCOUNT_MONITOR_CODEX` overrides local CLI discovery. Custom settings do not trigger an account login automatically.
 

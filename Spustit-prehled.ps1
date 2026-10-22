@@ -9,6 +9,8 @@ $runtimePath = Join-Path $dataPath 'runtime.json'
 $nodePath = Join-Path $env:USERPROFILE '.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe'
 if (-not (Test-Path -LiteralPath $nodePath)) { $nodePath = (Get-Command node -ErrorAction Stop).Source }
 New-Item -ItemType Directory -Path $dataPath -Force | Out-Null
+$taskName = 'Codex Account Monitor - manual public'
+& (Join-Path $PSScriptRoot 'scripts\register-monitor-task.ps1') -TaskName $taskName -DataPath $dataPath -Port $monitorPort
 $monitorRunning = $false
 if (Test-Path -LiteralPath $runtimePath) {
     try {
@@ -20,18 +22,6 @@ if (Test-Path -LiteralPath $runtimePath) {
     } catch { $monitorRunning = $false }
 }
 if (-not $monitorRunning) {
-    # On-demand only: Task Scheduler hosts the process outside Codex's process job.
-    # No trigger, automatic sign-in start, password, or elevated privileges.
-    $taskName = 'Codex Account Monitor - manual public'
-    $hostScript = Join-Path $PSScriptRoot 'scripts\run-monitor-host.ps1'
-    $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-    if ($existingTask -and @($existingTask.Actions | Where-Object { $_.Arguments -like ('*' + $hostScript + '*') }).Count -ne 1) { throw 'Nazev rucni ulohy uz pouziva jiny program.' }
-    $shellPath = Join-Path $env:USERPROFILE '.cache\codex-runtimes\codex-primary-runtime\dependencies\native\powershell\pwsh.exe'
-    if (-not (Test-Path -LiteralPath $shellPath)) { $shellPath = (Get-Command pwsh -ErrorAction Stop).Source }
-    $action = New-ScheduledTaskAction -Execute $shellPath -Argument ('-NoProfile -WindowStyle Hidden -File "' + $hostScript + '" -DataPath "' + $dataPath + '" -Port ' + $monitorPort) -WorkingDirectory $PSScriptRoot
-    $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
-    $settings = New-ScheduledTaskSettingsSet -Hidden -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
-    Register-ScheduledTask -TaskName $taskName -Action $action -Principal $principal -Settings $settings -Description 'Rucne spousteny prehled uctu; bez casoveho nebo prihlasovaciho triggeru.' -Force | Out-Null
     Start-ScheduledTask -TaskName $taskName
     for ($attempt=0; $attempt -lt 30; $attempt++) {
         Start-Sleep -Milliseconds 300

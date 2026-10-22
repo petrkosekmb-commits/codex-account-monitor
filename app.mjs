@@ -14,9 +14,23 @@ const accounts=await readAccountConfig(join(DATA,'accounts.json'));
 await mkdir(DATA,{recursive:true});
 const statePath=join(DATA,'state.json'),lockPath=join(DATA,'monitor.lock');
 let lock;
-try{lock=await open(lockPath,'wx');}catch{
-  let pid;try{pid=JSON.parse(await readFile(lockPath,'utf8')).pid;process.kill(pid,0);console.log('Přehled už běží.');process.exit(0);}
-  catch(e){if(e.code!=='ESRCH')throw new Error('Zámek přehledu nelze ověřit.');await unlink(lockPath);lock=await open(lockPath,'wx');}
+try{lock=await open(lockPath,'wx');}catch(openError){
+  if(openError.code!=='EEXIST')throw openError;
+  let pid;
+  try{
+    pid=JSON.parse(await readFile(lockPath,'utf8')).pid;
+    if(!Number.isInteger(pid)||pid<=0)throw new Error('Invalid lock owner.');
+    process.kill(pid,0);
+    const runtime=JSON.parse(await readFile(join(DATA,'runtime.json'),'utf8'));
+    const endpoint=new URL(runtime.url);
+    if(runtime.pid!==pid||endpoint.protocol!=='http:'||endpoint.hostname!=='127.0.0.1')throw new Error('Invalid runtime owner.');
+    const response=await fetch(runtime.url+'/api/state',{headers:{'X-Monitor-Key':runtime.key},signal:AbortSignal.timeout(1500)});
+    if(!response.ok)throw new Error('Runtime health check failed.');
+    console.log('Přehled už běží a jeho rozhraní odpovídá.');process.exit(0);
+  }catch(e){
+    if(e.code!=='ESRCH')throw new Error('Zámek přehledu existuje, ale běh nelze ověřit. Hostitel zkusí spuštění znovu.');
+    await unlink(lockPath);lock=await open(lockPath,'wx');
+  }
 }
 await lock.writeFile(JSON.stringify({pid:process.pid}));await lock.close();
 let state;
