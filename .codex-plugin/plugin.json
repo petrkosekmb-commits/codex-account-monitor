@@ -1,6 +1,6 @@
 {
   "name": "account-monitor",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "CZ: Místní přehled limitů a ruční přepnutí účtů. EN: Local usage dashboard and manual account switching.",
   "author": {
     "name": "Account Monitor contributors"

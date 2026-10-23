@@ -1,4 +1,4 @@
-# Přehled účtů Codex 0.2.4
+# Přehled účtů Codex 0.2.5
 
 Místní přehled limitů čtyř účtů, kruhový odpočet do očekávané obnovy, údaje o platnosti předplatného a volitelné automatické přepínání. Nezávislý komunitní projekt pro Windows.
 

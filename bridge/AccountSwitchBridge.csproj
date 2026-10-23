@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework><OutputType>Exe</OutputType>
     <AssemblyName>CodexSwitch</AssemblyName><RootNamespace>AccountSwitchBridge</RootNamespace>
-    <Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><Version>0.2.4</Version>
+    <Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><Version>0.2.5</Version>
     <UpstreamRoot Condition="'$(UpstreamRoot)' == ''">$(MSBuildThisFileDirectory).upstream/codex-switch-1.41.1</UpstreamRoot>
   </PropertyGroup>
   <ItemGroup><Compile Remove="compat/**/*.cs;tests/**/*.cs" /><ProjectReference Include="$(UpstreamRoot)/src/application/CodexSwitch.Application.csproj" /></ItemGroup>
