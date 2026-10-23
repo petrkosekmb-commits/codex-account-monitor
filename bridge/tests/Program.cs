@@ -60,3 +60,13 @@ Check(ChatTitle.Resolve(null,"Captured title")=="Captured title","unnamed canoni
 Check(ChatTitle.Resolve("Stored name","Captured title")=="Stored name","explicit stored chat name takes precedence");
 Check(ChatTitle.Resolve(" ","Captured title")=="Captured title","blank canonical name uses captured title");
 try{ChatTitle.Resolve(null," ");throw new Exception("Missing title accepted");}catch(InvalidDataException){Console.WriteLine("PASS missing titles fail before account changes");}
+var lockHome=Path.Combine(Path.GetTempPath(),"monitor-lock-test-"+Guid.NewGuid().ToString("N"));
+Directory.CreateDirectory(lockHome);
+try{
+ using(var first=MonitorOwnership.Acquire(lockHome)){
+   try{using var second=MonitorOwnership.Acquire(lockHome);throw new Exception("duplicate owner accepted");}
+   catch(IOException){Check(true,"second monitor cannot own the same Codex home");}
+ }
+ using var after=MonitorOwnership.Acquire(lockHome);
+ Check(true,"ownership can be reacquired after the owner closes");
+}finally{Directory.Delete(lockHome,true);}

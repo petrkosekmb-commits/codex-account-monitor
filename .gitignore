@@ -29,3 +29,7 @@ host-status.json
 backups/
 
 *.tmp
+
+bridge/credential-tests/bin/
+bridge/credential-tests/obj/
+account-monitor-owner.lock

@@ -25,3 +25,6 @@ test('pending transition shows its exact blocking phase without another attempt'
   const changed=await automaticSwitch({state,switcher:{pending:{phase:'BackingUp'}},save:async()=>{},switchAccount:async()=>{throw new Error('Must not switch');}});
   assert.equal(changed,false);assert.match(state.automation.message,/BackingUp/);assert.match(state.automation.message,/nedokončený/);
 });
+test('completed pinned chat does not block the only ongoing chat',async()=>{const x=setup();x.state.automation.threadId='old';x.switcher.threads.push({id:'old',status:'idle',lastTurnStatus:'completed'});await automaticSwitch(x.options);assert.deepEqual(x.calls,[[3,'chat']]);});
+test('multiple ongoing chats prevent an automatic restart even with a preferred chat',async()=>{const x=setup();x.state.automation.threadId='chat';x.switcher.threads.push({id:'other',status:'active'});await automaticSwitch(x.options);assert.deepEqual(x.calls,[]);assert.deepEqual(x.state.automation.attempts,{});});
+test('missing completion is not reported as successful switching',async()=>{const x=setup();x.options.switchAccount=async()=>{};await automaticSwitch(x.options);assert.equal(x.state.automation.enabled,false);assert.equal(x.state.automation.status,'error');});

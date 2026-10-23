@@ -20,7 +20,7 @@ test('isolated HTTP server protects operations, rejects duplicates, and recovers
   async function ready(){for(let n=0;n<80;n++){try{const runtime=JSON.parse(await readFile(join(data,'runtime.json'),'utf8'));const r=await fetch(url+'/api/state',{headers:{'X-Monitor-Key':runtime.key},signal:AbortSignal.timeout(500)});if(r.ok)return runtime;}catch{}await pause(100);}throw new Error('Isolated server did not start');}
   async function stop(){if(child&&child.exitCode===null){const exited=once(child,'exit');child.kill();await exited;}}
   try{
-    for(const file of ['account-state.mjs','config.mjs','app.mjs','core.mjs','rpc.mjs','switcher.mjs','switch-flow.mjs','automatic-switch.mjs','index.html'])await cp(new URL(file,source),join(code,file));
+    for(const file of ['state-writer.mjs','account-state.mjs','config.mjs','app.mjs','core.mjs','rpc.mjs','switcher.mjs','switch-flow.mjs','automatic-switch.mjs','index.html'])await cp(new URL(file,source),join(code,file));
     await mkdir(data,{recursive:true});await writeFile(join(data,'accounts.json'),JSON.stringify({accounts:EXAMPLE_EMAILS}));
     child=start();let runtime=await ready();
     const headers={'X-Monitor-Key':runtime.key,'Content-Type':'application/json'};

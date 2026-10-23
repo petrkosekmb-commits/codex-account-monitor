@@ -1,4 +1,5 @@
 import http from 'node:http';
+import {createStateWriter} from './state-writer.mjs';
 import {loadAccountState} from './account-state.mjs';
 import {readFile,writeFile,mkdir,rename,open,unlink} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
@@ -8,9 +9,9 @@ import {randomBytes,createHash} from 'node:crypto';
 import {record,sameEmail,view} from './core.mjs';
 import {Rpc} from './rpc.mjs';
 import {Switcher,bridgeInstalled} from './switcher.mjs';
-import {readAccountConfig} from './config.mjs';
 import {runSwitch} from './switch-flow.mjs';
 import {automaticSwitch} from './automatic-switch.mjs';
+import {readAccountConfig} from './config.mjs';
 const ROOT=dirname(fileURLToPath(import.meta.url));
 const DATA=process.env.ACCOUNT_MONITOR_DATA||join(process.env.LOCALAPPDATA||process.env.USERPROFILE,'CodexAccountMonitor');
 const accounts=await readAccountConfig(join(DATA,'accounts.json'));
@@ -49,7 +50,8 @@ if(bridgeInstalled()){
     });
   }catch{switcherError='Pomocník přepínání neprošel kontrolou nebo se nespustil.';}
 }
-function save(){const copy=JSON.stringify({...state,refreshing:false},null,2);saveTail=saveTail.then(async()=>{const tmp=statePath+'.tmp';await writeFile(tmp,copy,{mode:0o600});await rename(tmp,statePath);});return saveTail;}
+const enqueueState=createStateWriter(async copy=>{const tmp=statePath+'.tmp';await writeFile(tmp,copy,{mode:0o600});await rename(tmp,statePath);});
+function save(){const copy=JSON.stringify({...state,refreshing:false},null,2);saveTail=enqueueState(copy);return saveTail;}
 function profileHome(id){const email=state.slots.find(s=>s.id===id).email.toLowerCase();return join(DATA,'profiles',createHash('sha256').update(email).digest('hex').slice(0,24));}
 async function query(rpc){const {account}=await rpc.request('account/read',{refreshToken:false});if(account?.type!=='chatgpt'||!account.email)throw new Error('Chybí přihlášení účtu ChatGPT.');const raw=await rpc.request('account/rateLimits/read');return {account,raw};}
 async function withRpc(home,fn){const rpc=new Rpc(home);live.add(rpc);try{await rpc.start();return await fn(rpc);}finally{live.delete(rpc);rpc.close();}}
@@ -75,9 +77,12 @@ async function refresh(){
   }finally{busy=false;state.refreshing=false;}
 }
 function applySwitcherView(){
+  state.activeEmail=switcherView?.accounts.find(a=>a.current)?.email??null;
   for(const slot of state.slots){
     const account=switcherView?.accounts.find(a=>sameEmail(a.email,slot.email));
     slot.connected=!!account;
+    slot.requiresReauthentication=account?.requiresReauthentication===true;
+    slot.credentialDiagnostic=account?.diagnostic??null;
     slot.subscription=account?.subscription??null;
     if(account?.current){state.activeEmail=account.email;if(account.raw&&!account.error)delete state.activeError;}
     if(account?.raw&&!account.error)record(slot,{email:account.email,planType:account.plan},account.raw,account.checkedAt);
@@ -198,6 +203,6 @@ const automaticTimer=setInterval(async()=>{
   }catch{state.automation.enabled=false;state.automation.status='error';state.automation.message='Kontrola automatiky selhala; stav ověř ručně.';await save().catch(()=>{});}
   finally{autoBusy=false;}
 },30000);
-const statusTimer=setInterval(async()=>{if(switcher){try{switcherView=await switcher.request('status',{},5000);}catch{}}},5000);
+const statusTimer=setInterval(async()=>{if(switcher&&!busy&&!switching){try{switcherView=await switcher.request('status',{},5000);}catch{switcherView=null;switcherError='Spojení s pomocníkem není ověřené.';}}},5000);
 async function stop(){if(stopping)return;stopping=true;clearInterval(timer);clearInterval(statusTimer);clearInterval(automaticTimer);switcher?.close();for(const rpc of live)rpc.close();server.close();await saveTail.catch(()=>{});await unlink(lockPath).catch(()=>{});await unlink(join(DATA,'runtime.json')).catch(()=>{});process.exit(0);}
 process.on('SIGINT',stop);process.on('SIGTERM',stop);

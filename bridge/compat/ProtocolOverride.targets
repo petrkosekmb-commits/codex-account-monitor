@@ -5,4 +5,10 @@
       <Compile Include="$(MSBuildThisFileDirectory)SessionActivity.cs" />
     </ItemGroup>
   </Target>
+  <Target Name="UseLocalCredentialOwnership" BeforeTargets="CoreCompile" Condition="'$(MSBuildProjectName)' == 'CodexSwitch.Application'">
+    <ItemGroup>
+      <Compile Remove="AccountService.cs;$(MSBuildProjectDirectory)/AccountService.cs;Runtime.cs;$(MSBuildProjectDirectory)/Runtime.cs" />
+      <Compile Include="$(MSBuildThisFileDirectory)AccountService.cs;$(MSBuildThisFileDirectory)SessionCredentialPolicy.cs;$(MSBuildThisFileDirectory)ActiveUsageClient.cs;$(MSBuildThisFileDirectory)InactiveUsageReader.cs;$(MSBuildThisFileDirectory)Runtime.cs" />
+    </ItemGroup>
+  </Target>
 </Project>

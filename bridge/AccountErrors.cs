@@ -7,9 +7,14 @@ internal static class AccountErrors
     internal static string? Describe(string? error) => error switch
     {
         null => null,
+        "session_account_unavailable" => "Automatická obnova nevrátila přihlášený účet. Je potřeba jednorázově obnovit přihlášení.",
+        "desktop_session_refresh_pending" => "Čekám na automatickou obnovu přihlášení v Codexu. Kontrola se zopakuje.",
+        "usage_check_retry" => "Kontrola limitů se nezdařila. Přihlášení zůstává uložené; kontrola se zopakuje.",
+        "usage_identity_mismatch" => "Služba vrátila limity jiného účtu; tento údaj nebyl použit.",
+        "session_reauthentication_required" => "Služba potvrdila neplatné obnovovací přihlášení. Tento účet vyžaduje nové přihlášení.",
         Expired => "Přihlášení vypršelo nebo bylo zrušeno. Přihlas tento účet znovu.",
-        InvalidFormat => "Přihlášení nebo odpověď Codexu má neplatný formát. Přihlas účet znovu.",
+        InvalidFormat => "Odpověď kontroly má neplatný formát. Přihlášení zůstává uložené; kontrola se zopakuje.",
         Connection => "Codex nevrátil údaje o využití. Zkontroluj připojení a zopakuj kontrolu.",
-        _ => "Účet se nepodařilo ověřit. Zopakuj kontrolu; pokud chyba trvá, přihlas účet znovu."
+        _ => "Účet se nepodařilo ověřit. Přihlášení zůstává uložené; zopakuj kontrolu."
     };
 }

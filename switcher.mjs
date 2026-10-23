@@ -18,11 +18,12 @@ export class Switcher{
     }
     this.child=spawn(join(dir,'CodexSwitch.exe'),[this.data,this.home,JSON.stringify(this.accounts)],{windowsHide:true,stdio:['pipe','pipe','pipe']});
     this.child.stderr.on('data',()=>{});
-    const fail=()=>{for(const p of this.pending.values()){clearTimeout(p.timer);p.reject(new Error('Pomocník přepínání není dostupný.'));}this.pending.clear();};
+    const fail=()=>{this.failed=true;for(const p of this.pending.values()){clearTimeout(p.timer);p.reject(new Error('Pomocník přepínání není dostupný.'));}this.pending.clear();};
     this.child.on('exit',fail);this.child.on('error',fail);this.child.stdin.on('error',fail);
     this.lines=createInterface({input:this.child.stdout});
     this.lines.on('line',line=>{
       let m;try{m=JSON.parse(line);}catch{return;}
+      if(m.fatal){fail();return;}
       if(m.notification){for(const l of this.listeners)l(m);return;}
       const p=this.pending.get(m.id);if(!p)return;clearTimeout(p.timer);this.pending.delete(m.id);
       m.error?p.reject(new Error(m.error)):p.resolve(m.result);
@@ -30,6 +31,7 @@ export class Switcher{
     return this;
   }
   request(method,args={},timeout=180000){return new Promise((resolve,reject)=>{
+    if(this.failed||this.child.exitCode!==null||this.child.stdin.destroyed){reject(new Error('Pomocník přepínání není dostupný.'));return;}
     const id=++this.next;const timer=setTimeout(()=>{this.pending.delete(id);reject(new Error('Vypršel čas operace; před opakováním ověř stav.'));},timeout);
     this.pending.set(id,{resolve,reject,timer});this.child.stdin.write(JSON.stringify({id,method,...args})+'\n');
   });}

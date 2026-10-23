@@ -1,3 +1,10 @@
+# Ověření 0.2.9 / Verification
+
+Místní opravená instalace prošla přepnutím mezi dvěma účty a zpět (přibližně 48 a 56 sekund). Oba přechody zachovaly název chatu, každý vyvolal právě jedno pokračování, nezůstal nedokončený přechod a nastavení automatiky bylo obnoveno. Syntetické vyčerpání na kopii živého stavu vybralo vhodný účet a aktuální chat bez změny provozních limitů. Toto není živý test skutečného vyčerpání.
+
+The locally repaired installation completed a round trip between two accounts in approximately 48 and 56 seconds. Each leg preserved the chat title, continued exactly once, cleared the pending transition and restored automation settings. A synthetic exhaustion decision used an in-memory copy and left real limits untouched. This does not establish behavior at real quota exhaustion.
+
+Neověřeno / Not verified: dlouhodobá obnova přihlášení, skutečná expirace, všechny body pádu při rotaci tokenů, všechny budoucí dodatečné limity a plně bezobslužný provoz. Public a private zdrojové balíčky používají odlišné výchozí datové cesty; nejsou určeny k souběžnému běhu nad stejným profilem.
 # Ověření opravy 0.2.7
 
 Živá kontrola našla přechod zastavený ve fázi BackingUp bez změny účtu a bez odeslání pokračování. Vybraný chat měl prázdné pole name v thread/read, ale platný název v zachyceném stavu desktopu. Pomocník nyní zachovává tento název bez přejmenování. Chybějí-li oba názvy, přechod se stále zastaví před změnou účtu. Automatika ukazuje konkrétní fázi nedokončeného přechodu.
@@ -19,3 +26,6 @@ Prošlo 43 testů Node a 20 kontrol pomocníka .NET (soukromé edici 37 úplnýc
 Záznam posledního přechodu nedokazuje spouštěč automatického vyčerpání: snímek zdroje obsahoval 98 procent a záznam pokusů automatiky byl prázdný. Úplný test tohoto spouštěče je otevřený. Některá přihlášení hlásila chybu služby a uživatel požádal pokračovat bez jejich obnovy. Starší test 12 směrů patřil předchozí verzi a není důkazem opravy nového selhání.
 
 Kruhový odpočet a platnost předplatného byly zkontrolovány také v místním rozhraní. Údaj o platnosti pochází z posledního přihlášení; datum další platby není ověřené. Soukromé údaje ani živé testovací záznamy nejsou součástí distribuce.
+Distribuce 0.2.9: všech 55 testů Node prošlo v každé edici, včetně kontroly distribučního seznamu. / All 55 Node tests passed in each edition, including the distribution allowlist check.
+
+Distribuce 0.2.9: 55 testů Node v každé edici, sestavení obou pomocníků a protokolové i přihlašovací regrese prošly. / Both editions passed 55 Node tests, helper builds and protocol/credential regression suites.

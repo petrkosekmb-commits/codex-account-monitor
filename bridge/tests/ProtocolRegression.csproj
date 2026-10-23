@@ -2,4 +2,4 @@
   <PropertyGroup><TargetFramework>net10.0</TargetFramework><OutputType>Exe</OutputType><AssemblyName>CodexSwitch.Protocol.Tests</AssemblyName><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
   <ItemGroup><ProjectReference Include="$(UpstreamRoot)/src/platforms/protocol/CodexSwitch.Protocol.csproj" /></ItemGroup>
   <ItemGroup><Compile Include="../ChatTitle.cs" Link="ChatTitle.cs" /><Compile Include="../DesktopClose.cs" Link="DesktopClose.cs" /><Compile Include="../AccountErrors.cs" Link="AccountErrors.cs" /><Compile Include="../DesktopLaunch.cs" Link="DesktopLaunch.cs" /></ItemGroup>
-</Project>
+<ItemGroup><Compile Include="../MonitorOwnership.cs" Link="MonitorOwnership.cs" /></ItemGroup></Project>

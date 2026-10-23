@@ -35,6 +35,7 @@ internal static class Program
         }
         catch(OperationCanceledException) when(MonitorStop.IsCancellationRequested) { }
     }
+    private static string FailureCode(Exception e) => e.GetType().Name+"/"+new StackTrace(e,false).GetFrames()?.Select(f=>f.GetMethod()?.Name).FirstOrDefault(n=>n is not null && n!="MoveNext");
     private static string[] Allowed = Array.Empty<string>();
     private static void Send(object message) { lock (OutputLock) Console.WriteLine(JsonSerializer.Serialize(message, Json)); }
     private static bool AllowedEmail(string email) => Allowed.Contains(email, StringComparer.OrdinalIgnoreCase);
@@ -43,6 +44,8 @@ internal static class Program
     {
         var accounts=Service.Accounts.Where(a=>AllowedEmail(a.Email)).Select(a=>new {
             email=a.Email, plan=a.Plan, current=a.IsCurrent, error=AccountErrors.Describe(a.Error),
+            requiresReauthentication=a.Error==SessionCredentialPolicy.Reauthenticate||a.Error=="session_account_unavailable",
+            diagnostic=a.Error!=null&&SessionCredentialPolicy.Diagnostics.TryGetValue(a.Key,out var diagnostic)?diagnostic:null,
             subscription=new { activeUntil=a.SubscriptionActiveUntil?.ToUnixTimeMilliseconds(), checkedAt=a.SubscriptionLastChecked?.ToUnixTimeMilliseconds() },
             checkedAt=a.Usage?.CheckedAt.ToUnixTimeMilliseconds(),
             raw=a.Usage==null?null:new {
@@ -73,6 +76,9 @@ internal static class Program
             if(Allowed.Length!=4||Allowed.Distinct(StringComparer.OrdinalIgnoreCase).Count()!=4||Allowed.Any(e=>!System.Net.Mail.MailAddress.TryCreate(e,out var address)||address.Address!=e))throw new InvalidDataException();
         }
         catch {Send(new {fatal="Neplatný seznam čtyř účtů. / Invalid account configuration."});return 1;}
+        // Ownership follows the canonical Codex home, not a per-installation data directory.
+        // An OS file handle survives async thread changes and is released on process death.
+        using var ownership=MonitorOwnership.Acquire(Path.GetFullPath(args[1]));
         Vault=new AccountVault(Path.GetFullPath(args[0]));Service=new AccountService(Vault,Path.GetFullPath(args[1]));
         Sessions=new DesktopSessionMonitor(Path.GetFullPath(args[1]));Sessions.Start();
         var recheck=RecheckWaitingAsync();
@@ -145,7 +151,7 @@ internal static class Program
                 PendingApprovalException=>"Codex hlásí čekání na schválení nebo odpověď uživatele. Nejdřív dokonči čekající požadavek v Codexu.",
                 IncompleteSwitchException=>"Účet nebo pokračování nejsou plně ověřené. Zkontroluj stav a případně obnov připravený přechod.",
                 OperationCanceledException=>"Operace byla zrušena nebo vypršel její čas. Zkontroluj aktuální účet.",
-                _=>"Požadavek nelze dokončit. Přihlášení nebo spojení s aplikací nebylo ověřené."
+                _=>"Přepnutí selhalo: "+FailureCode(e)+". Účet ani pokračování nejsou ověřené."
             };
             Send(new{id,error=message});
         }
@@ -170,6 +176,8 @@ internal sealed class PreservingBackend:IAccountSwitchBackend
     public async Task<SwitchChat[]> CaptureAsync(CancellationToken c)
     {
         var chats=(await Backend.CaptureAsync(c)).ToList();
+        if(chats.Any(t=>Selected==null||t.Id!=Selected))
+            throw new InvalidOperationException("Přepnutí by zasáhlo jiný rozpracovaný chat. Nejdřív jej dokonči.");
         if(Selected!=null)
         {
             var thread=Sessions.Threads.Single(t=>t.Id==Selected);

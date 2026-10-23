@@ -10,7 +10,9 @@ export async function automaticSwitch({state,switcher,save,switchAccount,now=Dat
   const source=state.slots.find(s=>sameEmail(s.email,state.activeEmail));
   if(!source||availability(source,now).status!=='exhausted')return pause('Čekám na potvrzené vyčerpání právě používaného účtu.');
   const eligible=(switcher.threads||[]).filter(t=>!t.waiting&&(t.status==='active'||t.goal==='usageLimited'||['failed','interrupted'].includes(t.lastTurnStatus)&&t.lastTurnStartedAtMs>=now-10*60*1000));
-  const selected=auto.threadId?eligible.find(t=>t.id===auto.threadId):eligible.sort((a,b)=>(b.lastTurnStartedAtMs||0)-(a.lastTurnStartedAtMs||0))[0];
+  const preferred=eligible.find(t=>t.id===auto.threadId);
+  const selected=preferred??(eligible.length===1?eligible[0]:null);
+  if(eligible.length>1)return pause('Více chatů je rozpracovaných. Přepnutí by přerušilo další práci; nejdřív ji dokonči.');
   if(!selected)return pause('Zvol rozpracovaný chat pro pokračování.');
   const candidates=state.slots.filter(s=>s.id!==source.id&&s.connected&&!s.error&&availability(s,now).status==='available');
   const headroom=s=>Math.min(...s.snapshot.limits.windows.map(w=>100-w.used));
@@ -23,7 +25,7 @@ export async function automaticSwitch({state,switcher,save,switchAccount,now=Dat
   await save();
   try{
     await switchAccount(target.id,selected.id);
-    if(state.lastSwitch?.status==='error')throw new Error(state.lastSwitch.error);
+    if(state.lastSwitch?.status!=='complete')throw new Error('Přepnutí nebylo potvrzeno.');
     auto.status='waiting';auto.message='Účet byl přepnut; čekám na další potvrzené vyčerpání.';
   }catch{
     auto.enabled=false;auto.status='error';auto.message='Přepnutí nebylo ověřené. Automatika se vypnula; zkontroluj Codex a připravený přechod.';
