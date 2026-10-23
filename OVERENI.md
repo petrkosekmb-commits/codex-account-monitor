@@ -1,4 +1,10 @@
-# Ověření verze 0.2.5
+# Ověření verze 0.2.6
+
+Prošlo všech 46 testů soukromé edice, 48 testů veřejné edice a 20 regresních kontrol každého sestaveného pomocníka .NET. Nové kontroly ověřují výměnu účtu se zálohou přesných původních dat, zachování historie podle identity při změně pořadí, vypnutí automatiky, prázdné údaje nového účtu, blokaci nedokončeného přechodu a odmítnutí poškozené konfigurace. Veřejný distribuční seznam obsahuje pouze příkladové adresy example.com.
+
+Živě byla ověřena instalace 0.2.6, úspěšná migrace čtyř karet, zachování aktuální identity a připravený pomocník bez nedokončeného přechodu. Nový účet byl připojen oficiálním přihlášením, služba potvrdila jeho identitu, tarif a aktuální limity. Jeho přepnutí s pokračováním není tímto ověřeno. Původní stav a chráněný trezor zůstaly v místní záloze; vyřazený účet není zahrnut do dalších kontrol.
+
+# Dřívější ověření verze 0.2.5
 
 Prošlo 43 testů Node a 20 kontrol pomocníka .NET (soukromé edici 37 úplných testů před přidáním předplatného a následně všech 7 testů dashboardu). Kontroly zahrnují autentizaci místního HTTP rozhraní, izolaci konfigurace, výpadek procesu, částečné přepnutí, nejasné odeslání, čekající schválení, odpočet a předplatné. Veřejný distribuční seznam používá pouze adresy example.com a prošel kontrolou citlivých vzorů.
 

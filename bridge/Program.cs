@@ -94,7 +94,7 @@ internal static class Program
         {
             Operation=new CancellationTokenSource(TimeSpan.FromMinutes(method=="login"?15:10));var ct=Operation.Token;
             if(!Ready){await Service.InitializeAsync(ct);Ready=true;}
-            if(method=="initialize"||method=="refresh"){await Service.SynchronizeCurrentAsync(ct);await Service.RefreshAllAsync(null,ct);}
+            if(method=="initialize"||method=="refresh"){await Service.SynchronizeCurrentAsync(ct);await Task.WhenAll(Service.Accounts.Where(a=>AllowedEmail(a.Email)).Select(a=>Service.RefreshAccountAsync(a.Key,ct)));}
             else if(method=="dismiss")
             {
                 var pending=Vault.Data.PendingSwitch;

@@ -1,10 +1,11 @@
 import http from 'node:http';
+import {loadAccountState} from './account-state.mjs';
 import {readFile,writeFile,mkdir,rename,open,unlink} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
 import {join,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {randomBytes} from 'node:crypto';
-import {initialState,record,sameEmail,view} from './core.mjs';
+import {randomBytes,createHash} from 'node:crypto';
+import {record,sameEmail,view} from './core.mjs';
 import {Rpc} from './rpc.mjs';
 import {Switcher,bridgeInstalled} from './switcher.mjs';
 import {readAccountConfig} from './config.mjs';
@@ -35,9 +36,7 @@ try{lock=await open(lockPath,'wx');}catch(openError){
   }
 }
 await lock.writeFile(JSON.stringify({pid:process.pid}));await lock.close();
-let state;
-try{state=JSON.parse(await readFile(statePath,'utf8'));if(state.version!==1||state.slots?.length!==4||state.slots.some((s,i)=>!sameEmail(s.email,accounts[i])))throw new Error('Uložené účty neodpovídají konfiguraci. Použij novou složku ACCOUNT_MONITOR_DATA. / Use a new data directory for a changed account list.');}
-catch(e){if(e.code!=='ENOENT')throw e;state=initialState(accounts);}
+const state=await loadAccountState(statePath,accounts);
 const key=randomBytes(32).toString('hex');
 const live=new Set();let login=null,busy=false,saveTail=Promise.resolve(),stopping=false;
 let switcher=null,switcherView=null,switching=false,switcherError=null;
@@ -51,7 +50,7 @@ if(bridgeInstalled()){
   }catch{switcherError='Pomocník přepínání neprošel kontrolou nebo se nespustil.';}
 }
 function save(){const copy=JSON.stringify({...state,refreshing:false},null,2);saveTail=saveTail.then(async()=>{const tmp=statePath+'.tmp';await writeFile(tmp,copy,{mode:0o600});await rename(tmp,statePath);});return saveTail;}
-function profileHome(id){return join(DATA,'profiles',String(id));}
+function profileHome(id){const email=state.slots.find(s=>s.id===id).email.toLowerCase();return join(DATA,'profiles',createHash('sha256').update(email).digest('hex').slice(0,24));}
 async function query(rpc){const {account}=await rpc.request('account/read',{refreshToken:false});if(account?.type!=='chatgpt'||!account.email)throw new Error('Chybí přihlášení účtu ChatGPT.');const raw=await rpc.request('account/rateLimits/read');return {account,raw};}
 async function withRpc(home,fn){const rpc=new Rpc(home);live.add(rpc);try{await rpc.start();return await fn(rpc);}finally{live.delete(rpc);rpc.close();}}
 async function refresh(){

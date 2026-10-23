@@ -12,7 +12,7 @@ test('dashboard uses isolated configured accounts and rejects unauthorized reque
   const root=await mkdtemp(join(tmpdir(),'account-monitor-app-'));
   let child;
   try{
-    for(const name of ['app.mjs','core.mjs','config.mjs','rpc.mjs','switcher.mjs','switch-flow.mjs','automatic-switch.mjs','index.html'])
+    for(const name of ['account-state.mjs','config.mjs','app.mjs','core.mjs','rpc.mjs','switcher.mjs','switch-flow.mjs','automatic-switch.mjs','index.html'])
       await copyFile(new URL('../'+name,import.meta.url),join(root,name));
     const data=join(root,'local-data');await mkdir(data);
     await writeFile(join(data,'accounts.json'),JSON.stringify({accounts:EXAMPLE_EMAILS}));

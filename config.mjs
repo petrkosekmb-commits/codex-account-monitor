@@ -8,9 +8,9 @@ export function validateAccounts(config){
     throw new Error('Adresy účtů musí být různé. / Account addresses must be unique.');
   return emails;
 }
-export async function readAccountConfig(path){
+export async function readAccountConfig(path,fallback){
   let value;
   try{value=JSON.parse(await readFile(path,'utf8'));}
-  catch{throw new Error('Chybí platný místní accounts.json. Postup najdeš v README. / Create the local accounts.json described in README.');}
+  catch(error){if(error.code==='ENOENT'&&fallback)return validateAccounts({accounts:fallback});throw new Error('Chybí platný místní accounts.json. Postup najdeš v README. / Create the local accounts.json described in README.');}
   return validateAccounts(value);
 }
