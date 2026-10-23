@@ -1,99 +1,33 @@
-# Codex Account Monitor 0.2.3
+# Přehled účtů Codex 0.2.4
 
-**CZ:** Místní přehled limitů čtyř účtů Codexu a ruční přepnutí s pokračováním v rozpracovaném chatu.
+Místní přehled limitů čtyř účtů, kruhový odpočet do očekávané obnovy, údaje o platnosti předplatného a volitelné automatické přepínání. Nezávislý komunitní projekt pro Windows.
 
-**EN:** A local usage dashboard for four Codex accounts, with manual account switching and continuation of unfinished chats.
+## Spuštění
 
-Community project for Windows. The dashboard is currently in Czech. Documentation is provided in Czech and English. This is an independent project, not an official OpenAI product.
+Požadavky: Windows, Codex desktop a místní CLI, Node.js 20+, PowerShell 7 a .NET SDK 10.0.4xx pro sestavení pomocníka.
 
-## Česky
+Nejdříve vytvořte %LOCALAPPDATA%\CodexAccountMonitor\accounts.json podle accounts.example.json a zadejte čtyři vlastní různé adresy. Hesla do konfigurace nepatří. Změna seznamu vyžaduje novou datovou složku. Provozní data jsou v %LOCALAPPDATA%\CodexAccountMonitor.
 
-### Co aplikace umí
+Spusťte bridge/Build.ps1, potom Install.ps1 a Spustit-prehled.cmd. Zdrojový ZIP neobsahuje sestavené binární soubory; sestavení je nutné. Skript ověřuje otisk připnutých zdrojů codex-switch a spouští 20 regresních kontrol. Přehled: http://127.0.0.1:55163. Účty se připojují oficiálním přihlášením v prohlížeči.
 
-- Ukazuje zbývající pětihodinové a týdenní limity a očekávané časy obnovy.
-- Kontroluje účty každých pět minut při zapnutém počítači. Neznámé, staré a chybové údaje neoznačuje jako dostupné.
-- Po ručním požadavku zavře Codex, přepne na dříve připojený účet, znovu otevře místní chat a pokračuje v něm.
-- Zachovává název chatu a ukládá stav přechodu pro obnovu po přerušení. Nejisté pokračování automaticky neopakuje.
-- Odmítá přepnutí, pokud Codex hlásí čekající schválení nebo odpověď uživatele.
+## Přehled a přepínání
 
-Přepnutí ovlivní všechna okna Codexu a další klienty sdílející stejné přihlášení. Automatické střídání účtů se nenastavuje. Placené kredity ani ruční obnovení limitu se nepoužívají.
+Procenta ukazují zbývající zahrnutý limit. Kruhová výseč ubývá podle času do očekávané obnovy pětihodinového nebo týdenního okna. Zastaralé údaje jsou šedé; uplynutí odpočtu samo nepotvrzuje dostupnost. Historie zaznamenává zjištění vyčerpání, nikoli přesný okamžik vzniku. Další modelové limity se neporovnávají.
 
-### Příprava a spuštění
+Sekce Předplatné ukazuje tarif, údaj z přihlášení o platnosti a čas jeho posledního ověření. Nejde o expiraci přístupového tokenu. Datum příští platby ani automatické prodloužení se neodvozuje; není-li ověřené, přehled to výslovně uvádí.
 
-Potřebujete Windows, nainstalovaný Codex desktop s místním CLI, Node.js 20 nebo novější, PowerShell 7 a .NET SDK 10.0.4xx pro sestavení pomocníka. Spouštěče umějí použít i existující běhové prostředí dodané s Codexem.
+Ruční přepnutí se spouští tlačítkem Přepnout a pokračovat. Volitelná automatika se zapíná samostatně v přehledu a kontroluje stav každých 30 sekund. Po potvrzeném vyčerpání aktuálního účtu vybírá připojený účet s největší rezervou. Staré údaje, čekající schválení a nedokončený přechod automatiku blokují. Při neověřeném výsledku se vypne. Placené kredity ani ruční obnovení limitu se nepoužívají.
 
-1. Stáhněte zdroje nebo naklonujte tento repozitář.
-2. Připravte místní konfiguraci mimo repozitář:
+Přepnutí krátce zavře všechna okna Codexu, změní přihlášení a obnoví rozpracované místní chaty. Ovlivní také klienty sdílející stejné přihlášení. Názvy zůstávají zachované. Dokončené chaty se znovu nespouštějí. Nejasný výsledek odeslání pokračování se automaticky neopakuje. Nedokončený přechod je možné ručně obnovit; zahození je dovoleno pouze před změnou účtu a bez neověřeného odeslání.
 
-```powershell
-$settingsDir = Join-Path $env:LOCALAPPDATA 'CodexAccountMonitor'
-New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null
-$accountsPath = Join-Path $settingsDir 'accounts.json'
-if (Test-Path -LiteralPath $accountsPath) { throw 'Konfigurace už existuje; nejdřív ji zkontrolujte.' }
-Copy-Item -LiteralPath .\accounts.example.json -Destination $accountsPath
-notepad $accountsPath
-```
+## Provoz a soukromí
 
-3. Nahraďte všechny čtyři ukázkové adresy vlastními odlišnými adresami. Soubor obsahuje pouze seznam adres, nikoli hesla. Při změně již používaného seznamu použijte novou datovou složku; stará historie se nesmí přiřadit jinému účtu.
-4. Sestavte pomocníka a případně nainstalujte místní plugin:
+Úloha Windows spouští monitor po přihlášení uživatele a obnovuje hostitele po výpadku. Používá běžná práva bez uloženého hesla. Při vypnutém nebo odhlášeném počítači monitor nepracuje. Čerstvost dat je 10 minut. Běžná kontrola bez zapnuté automatiky běží po pěti minutách. Otevřená stránka obnoví místní oprávnění po restartu serveru.
 
-```powershell
-.\bridge\Build.ps1
-.\Install.ps1
-```
+DPAPI trezor, přístupy, provozní stav, databáze a logy zůstávají pouze místně. Nepřidávejte je do GitHubu ani hlášení chyb. MCP nástroje account_overview a refresh_limits pouze čtou a obnovují údaje; přepínání ovládá místní přehled. ACCOUNT_MONITOR_DATA, ACCOUNT_MONITOR_PORT a ACCOUNT_MONITOR_CODEX upravují datovou složku, port a cestu k CLI.
 
-Sestavení ověří SHA256 připnutých zdrojů projektu codex-switch, spustí regresní kontroly a vytvoří vlastní kontrolní součty knihoven. Binární soubory nejsou součástí tohoto repozitáře.
+## Ověření a omezení
 
-5. Spusťte `Spustit-prehled.cmd` nebo `Spustit-prehled.ps1`. Přehled běží na **http://127.0.0.1:55163**. U každého účtu dokončete vlastní oficiální přihlášení přes tlačítko **Připojit účet**. Potom vyberte chat a cílový účet tlačítkem **Přepnout a pokračovat**.
+Tato verze obsahuje opravy cíleného zavírání desktopu, nezávislého hostitele a obnovy spojení při otevírání více chatů. Testy a zbývající omezení jsou v OVERENI.md. Úplné ověření automatického spouštěče při skutečném vyčerpání zůstává otevřené; tato verze netvrdí, že byly odstraněny všechny možné chyby.
 
-Přehled běží v samostatné úloze Windows `Codex Account Monitor - manual public`, aby přežil zavření Codexu. Spouští se po přihlášení daného uživatele do Windows; hostitel po chybě zkusí až třikrát nový proces s odstupem tří sekund a úloha Windows až třikrát nový běh hostitele po jedné minutě. Neukládá heslo a nepoužívá zvýšená práva. Automaticky se spouští pouze přehled, přepnutí účtu zůstává ruční. Už otevřená stránka po restartu přehledu sama obnoví místní oprávnění. Po uspání či vypnutí počítače se dostupnost neověřuje.
-
-### Soukromí a nastavení
-
-Vlastní adresy, přihlášení, historie, databáze a logy patří výhradně na místní počítač. Výchozí datová složka je `%LOCALAPPDATA%\CodexAccountMonitor`. Úložiště účtů na Windows chrání uživatelské DPAPI. Chraňte je stejně jako přihlášení k účtu. Vývojové a produkční přihlašovací údaje se nevkládají do repozitáře ani do hlášení chyb.
-
-Volitelné proměnné: `ACCOUNT_MONITOR_DATA` změní datovou složku a `ACCOUNT_MONITOR_PORT` místní port. Nastavte je před spuštěním přehledu i klienta MCP. `ACCOUNT_MONITOR_CODEX` může určit cestu k místnímu CLI. Změna konfigurace neprovádí odhlášení ani přihlášení automaticky.
-
-Nástroje pluginu `account_overview` a `refresh_limits` pouze čtou stav nebo vyžádají kontrolu. Samotné přepnutí není nástrojem dostupným modelu.
-
-## English
-
-### Features
-
-- Displays remaining five-hour and weekly usage limits, expected reset times, and snapshot age for four locally configured accounts.
-- Refreshes every five minutes while the local process and computer are running. Stale or failed reads are never treated as verified availability.
-- A manual action closes Codex, applies a previously connected account, reopens local unfinished chats, and continues work.
-- Preserves chat titles and checkpoints interrupted handoffs. An uncertain continuation is not blindly sent again.
-- Refuses a switch when Codex reports a pending approval or user response.
-
-Switching affects all Codex windows and clients sharing the same login. There is no automatic account rotation. Paid credits and manual usage resets are not consumed by this application.
-
-### Setup
-
-Requirements: Windows, Codex desktop and its local CLI, Node.js 20+, PowerShell 7, and .NET SDK 10.0.4xx to build the helper. Existing runtimes bundled with Codex can also be used.
-
-1. Clone or download the source.
-2. Copy `accounts.example.json` to `%LOCALAPPDATA%\CodexAccountMonitor\accounts.json`, creating the directory if needed. Replace the four example addresses with your own distinct addresses. Do not overwrite existing configuration without reviewing it. No passwords belong in this file. Use a new data directory if changing an account list that already has saved history.
-3. Run `bridge/Build.ps1` to build the helper. It verifies the pinned upstream archive before building. Run `Install.ps1` for local plugin installation, then `Spustit-prehled.cmd` or `Spustit-prehled.ps1` to start the dashboard.
-4. Open **http://127.0.0.1:55163**. Connect each account through its own official browser login. Select an unfinished chat and use **Přepnout a pokračovat** on the target account.
-
-A Windows task hosts the monitor outside Codex's process tree so it survives the desktop restart. It starts when its user signs in to Windows and retries a failed monitor process up to three times at three-second intervals; Windows retries a failed host up to three times at one-minute intervals. It stores no password and runs with ordinary interactive-user privileges. Only monitoring starts automatically; account switching remains manual. An already open dashboard recovers its local authorization after a monitor restart. Logging out or shutting down stops monitoring until the next sign-in.
-
-`ACCOUNT_MONITOR_DATA` changes the data directory; `ACCOUNT_MONITOR_PORT` changes the loopback port. Set them consistently for the dashboard launcher and MCP client. `ACCOUNT_MONITOR_CODEX` overrides local CLI discovery. Custom settings do not trigger an account login automatically.
-
-### Privacy and validation
-
-This repository contains example addresses and source code only. Configuration, credentials, account history, databases, and logs remain local. The Windows account vault uses user-scoped DPAPI. Treat it as sensitive authentication material and never upload it with bug reports.
-
-The MCP tools `account_overview` and `refresh_limits` do not switch the desktop account or send continuation messages. Switching is initiated by a manual dashboard action.
-
-The shared switching implementation was validated in a private installation across all 12 directions between four accounts, including account identity, preserved chat title, and a new continuation message. Public configuration and isolation are tested separately; no private account data or test history is distributed. This public edition replaces embedded account addresses with local configuration. Its configuration, dashboard, and protocol changes have synthetic tests; the generalized public edition has not been tested across every account combination or Codex release. See [validation notes](OVERENI.md).
-
-## Development and license
-
-```powershell
-npm test
-.\bridge\Build.ps1
-```
-
-The helper uses the pinned MIT-licensed [codex-switch](https://github.com/Gaebabi/codex-switch) libraries without hardware monitoring modules. See [third-party notices](THIRD_PARTY_NOTICES.md) and [LICENSE](LICENSE). Runtime binaries and personal data are excluded from Git.
+Testy: npm test. Původ knihoven a licence: THIRD_PARTY_NOTICES.md a bridge/LICENSE-codex-switch.txt. Oficiální popis App Serveru: https://learn.chatgpt.com/docs/app-server.

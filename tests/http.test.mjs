@@ -20,7 +20,7 @@ test('isolated HTTP server protects operations, rejects duplicates, and recovers
   async function ready(){for(let n=0;n<80;n++){try{const runtime=JSON.parse(await readFile(join(data,'runtime.json'),'utf8'));const r=await fetch(url+'/api/state',{headers:{'X-Monitor-Key':runtime.key},signal:AbortSignal.timeout(500)});if(r.ok)return runtime;}catch{}await pause(100);}throw new Error('Isolated server did not start');}
   async function stop(){if(child&&child.exitCode===null){const exited=once(child,'exit');child.kill();await exited;}}
   try{
-    for(const file of ['app.mjs','core.mjs','config.mjs','rpc.mjs','switcher.mjs','switch-flow.mjs','index.html'])await cp(new URL(file,source),join(code,file));
+    for(const file of ['app.mjs','core.mjs','config.mjs','rpc.mjs','switcher.mjs','switch-flow.mjs','automatic-switch.mjs','index.html'])await cp(new URL(file,source),join(code,file));
     await mkdir(data,{recursive:true});await writeFile(join(data,'accounts.json'),JSON.stringify({accounts:EXAMPLE_EMAILS}));
     child=start();let runtime=await ready();
     const headers={'X-Monitor-Key':runtime.key,'Content-Type':'application/json'};
@@ -34,6 +34,15 @@ test('isolated HTTP server protects operations, rejects duplicates, and recovers
     await t.test('invalid account and unavailable switcher cannot start a transition',async()=>{
       assert.equal((await fetch(url+'/api/switch',{method:'POST',headers,body:JSON.stringify({id:8})})).status,400);
       assert.equal((await fetch(url+'/api/switch',{method:'POST',headers,body:JSON.stringify({id:2})})).status,409);
+    });
+    await t.test('automation requires verified desktop and can always be disabled',async()=>{
+      const set=body=>fetch(url+'/api/automation',{method:'POST',headers,body:JSON.stringify(body)});
+      assert.equal((await set({enabled:'yes'})).status,400);
+      assert.equal((await set({enabled:true,threadId:'invalid'})).status,400);
+      assert.equal((await set({enabled:true})).status,409);
+      assert.equal((await set({enabled:false})).status,200);
+      const state=await (await fetch(url+'/api/state',{headers})).json();assert.equal(state.automation.enabled,false);
+      assert.equal((await fetch(url+'/api/dismiss-switch',{method:'POST',headers})).status,409);
     });
     await t.test('duplicate launch verifies and keeps the existing server',async()=>{
       const duplicate=start();const exited=once(duplicate,'exit');const [code]=await exited;assert.equal(code,0);assert.equal((await ready()).pid,runtime.pid);

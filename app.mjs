@@ -9,6 +9,7 @@ import {Rpc} from './rpc.mjs';
 import {Switcher,bridgeInstalled} from './switcher.mjs';
 import {readAccountConfig} from './config.mjs';
 import {runSwitch} from './switch-flow.mjs';
+import {automaticSwitch} from './automatic-switch.mjs';
 const ROOT=dirname(fileURLToPath(import.meta.url));
 const DATA=process.env.ACCOUNT_MONITOR_DATA||join(process.env.LOCALAPPDATA||process.env.USERPROFILE,'CodexAccountMonitor');
 const accounts=await readAccountConfig(join(DATA,'accounts.json'));
@@ -78,6 +79,7 @@ function applySwitcherView(){
   for(const slot of state.slots){
     const account=switcherView?.accounts.find(a=>sameEmail(a.email,slot.email));
     slot.connected=!!account;
+    slot.subscription=account?.subscription??null;
     if(account?.current){state.activeEmail=account.email;if(account.raw&&!account.error)delete state.activeError;}
     if(account?.raw&&!account.error)record(slot,{email:account.email,planType:account.plan},account.raw,account.checkedAt);
     else if(account?.error)slot.error=account.error;
@@ -120,7 +122,7 @@ async function cancelLogin(){
   if(old?.bridge){try{await switcher.request('cancel',{},10000);}catch{}return;}
   if(old?.rpc){if(old.loginId)try{await old.rpc.request('account/login/cancel',{loginId:old.loginId},5000);}catch{}live.delete(old.rpc);old.rpc.close();}
 }
-function publicView(){const result=view(state);result.activeError=state.activeError??null;result.login=login?{id:login.id,status:login.status,url:login.url??null,message:login.message??null}:null;
+function publicView(){const result=view(state);result.automation=state.automation??{enabled:false,status:"off"};result.activeError=state.activeError??null;result.login=login?{id:login.id,status:login.status,url:login.url??null,message:login.message??null}:null;
   result.switcher={installed:!!switcher,ready:!!switcherView?.ready,desktop:!!switcherView?.desktop,error:switcherError,switching,
     threads:switcherView?.threads??[],pending:switcherView?.pending??null,lastSwitch:state.lastSwitch??null};return result;}
 async function switchAccount(id,threadId,resume=false){
@@ -129,7 +131,7 @@ async function switchAccount(id,threadId,resume=false){
   switching=true;busy=true;
   try{
     const result=await runSwitch({state,id,threadId,resume,save,
-      request:(method,selected)=>switcher.request(method,method==='status'?{}:{email:slot.email,threadId:selected},method==='status'?10000:4*60*1000),
+      request:(method,selected)=>switcher.request(method,method==='status'?{}:{email:slot.email,threadId:selected},method==='status'?10000:11*60*1000),
       apply:result=>{switcherView=result;applySwitcherView();}});
     if(result.ok)switcherError=null;
   }
@@ -148,6 +150,18 @@ const server=http.createServer(async(req,res)=>{
   try{
     if(req.url==='/api/state'&&req.method==='GET')return send(200,publicView());
     if(req.url==='/api/refresh'&&req.method==='POST'){if(login?.rpc||login?.bridge)return send(409,{error:'Nejdřív dokonči přihlášení.'});void refresh().catch(()=>{});return send(202,{ok:true});}
+    if(req.url==='/api/automation'&&req.method==='POST'){
+      let body='';for await(const chunk of req){body+=chunk;if(body.length>1024)return send(413,{error:'Příliš dlouhý požadavek.'});}
+      const options=JSON.parse(body);
+      if(typeof options.enabled!=='boolean'||options.threadId&&!/^[a-f0-9-]{36}$/i.test(options.threadId))return send(400,{error:'Neplatné nastavení automatiky.'});
+      if(options.enabled&&(!switcherView?.ready||!switcherView.desktop||switcherView.pending||switching||busy||login?.bridge||login?.rpc))return send(409,{error:'Nejdřív ověř spojení a dokonči připravený přechod.'});
+      state.automation={enabled:options.enabled,threadId:options.threadId??null,attempts:state.automation?.attempts??{},status:options.enabled?'waiting':'off'};
+      await save();return send(200,{ok:true});
+    }
+    if(req.url==='/api/dismiss-switch'&&req.method==='POST'){
+      if(!switcher||switching||busy)return send(409,{error:'Probíhá jiná operace.'});
+      switcherView=await switcher.request('dismiss');applySwitcherView();await save();return send(200,{ok:true});
+    }
     if(req.url==='/api/login'&&req.method==='POST'){
       let body='';for await(const chunk of req){body+=chunk;if(body.length>1024)return send(413,{error:'Příliš dlouhý požadavek.'});}
       const id=JSON.parse(body).id;if(!Number.isInteger(id)||id<1||id>4)return send(400,{error:'Neplatný účet.'});
@@ -175,6 +189,16 @@ await writeFile(join(DATA,'runtime.json'),JSON.stringify({pid:process.pid,url:or
 await save();console.log(origin);
 void refresh().catch(()=>{});
 const timer=setInterval(()=>{if(!login?.rpc&&!login?.bridge&&!switching)void refresh().catch(()=>{});else if(login&&Date.now()-login.startedAt>15*60*1000)void cancelLogin();},5*60*1000);
+let autoBusy=false;
+const automaticTimer=setInterval(async()=>{
+  if(!state.automation?.enabled||autoBusy||busy||switching||login?.bridge||login?.rpc)return;
+  autoBusy=true;
+  try{
+    await refresh();
+    await automaticSwitch({state,switcher:{...switcherView,switching},save,switchAccount});
+  }catch{state.automation.enabled=false;state.automation.status='error';state.automation.message='Kontrola automatiky selhala; stav ověř ručně.';await save().catch(()=>{});}
+  finally{autoBusy=false;}
+},30000);
 const statusTimer=setInterval(async()=>{if(switcher){try{switcherView=await switcher.request('status',{},5000);}catch{}}},5000);
-async function stop(){if(stopping)return;stopping=true;clearInterval(timer);clearInterval(statusTimer);switcher?.close();for(const rpc of live)rpc.close();server.close();await saveTail.catch(()=>{});await unlink(lockPath).catch(()=>{});await unlink(join(DATA,'runtime.json')).catch(()=>{});process.exit(0);}
+async function stop(){if(stopping)return;stopping=true;clearInterval(timer);clearInterval(statusTimer);clearInterval(automaticTimer);switcher?.close();for(const rpc of live)rpc.close();server.close();await saveTail.catch(()=>{});await unlink(lockPath).catch(()=>{});await unlink(join(DATA,'runtime.json')).catch(()=>{});process.exit(0);}
 process.on('SIGINT',stop);process.on('SIGTERM',stop);

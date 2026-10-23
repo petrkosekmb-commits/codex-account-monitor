@@ -16,5 +16,6 @@ $userName=[Security.Principal.WindowsIdentity]::GetCurrent().Name
 $action=New-ScheduledTaskAction -Execute $shellPath -Argument ('-NoProfile -NonInteractive -WindowStyle Hidden -File "'+$hostScript+'" -DataPath "'+$resolvedData+'" -Port '+$Port) -WorkingDirectory $monitorRoot
 $principal=New-ScheduledTaskPrincipal -UserId $userName -LogonType Interactive -RunLevel Limited
 $trigger=New-ScheduledTaskTrigger -AtLogOn -User $userName
+$watchdog=New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1)
 $settings=New-ScheduledTaskSettingsSet -Hidden -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
-Register-ScheduledTask -TaskName $TaskName -Action $action -Principal $principal -Trigger $trigger -Settings $settings -Description 'Local account dashboard; starts at user sign-in and restarts after failures. Account switching remains manual.' -Force | Out-Null
+Register-ScheduledTask -TaskName $TaskName -Action $action -Principal $principal -Trigger @($trigger,$watchdog) -Settings $settings -Description 'Local account dashboard; starts at user sign-in and restarts after failures. Automatic account switching requires explicit local opt-in.' -Force | Out-Null

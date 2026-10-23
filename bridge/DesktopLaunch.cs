@@ -6,7 +6,7 @@ internal static class DesktopLaunch
     {
         if(!Guid.TryParse(threadId,out _))throw new InvalidDataException("Chybí ověřený chat pro otevření Codexu.");
         if(!File.Exists(executable))throw new FileNotFoundException("Chybí aplikace Codex.");
-        var start=new ProcessStartInfo(executable){UseShellExecute=false,WorkingDirectory=Path.GetDirectoryName(executable)!};
+        var start=new ProcessStartInfo(executable){UseShellExecute=false,CreateNoWindow=true,WorkingDirectory=Path.GetDirectoryName(executable)!};
         start.ArgumentList.Add("--single-argument");
         start.ArgumentList.Add("codex://threads/"+threadId);
         return start;

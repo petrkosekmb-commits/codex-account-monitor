@@ -11,14 +11,14 @@ internal sealed record SessionActivity(bool Available, int Running, int Waiting,
     int? Queued = null, int? Goals = null, int PausedQueued = 0, int PausedGoals = 0, string? QueueProblem = null);
 
 internal sealed record DesktopThreadState(string Id, string Owner, string Status, bool Waiting, string? Goal, string? Title,
-    string? ResumeState, string? LastTurnId, string? LastTurnStatus, string? LastMessageId);
+    string? ResumeState, string? LastTurnId, string? LastTurnStatus, string? LastMessageId, long? LastTurnStartedAtMs = null);
 
 internal sealed class SessionActivityLedger
 {
     private sealed record Entry(string Owner, long Revision = -1, string? Status = null, bool Waiting = false, bool Child = false,
         bool GoalKnown = false, string? Goal = null, string? Title = null, string? ResumeState = null,
         string? LastTurnId = null, string? LastTurnStatus = null, string? LastMessageId = null, int LastTurnIndex = -1,
-        long UpdatedAt = 0);
+        long UpdatedAt = 0, long? LastTurnStartedAtMs = null);
     private readonly Dictionary<string, Entry> _entries = new();
     private readonly object _sync = new();
     private bool _discovered;
@@ -56,7 +56,7 @@ internal sealed class SessionActivityLedger
         lock (_sync) return _entries.Where(pair => pair.Value.Status != null && !pair.Value.Child).Select(pair =>
         {
             var e = pair.Value;
-            return new DesktopThreadState(pair.Key, e.Owner, e.Status!, e.Waiting, e.Goal, e.Title, e.ResumeState, e.LastTurnId, e.LastTurnStatus, e.LastMessageId);
+            return new DesktopThreadState(pair.Key, e.Owner, e.Status!, e.Waiting, e.Goal, e.Title, e.ResumeState, e.LastTurnId, e.LastTurnStatus, e.LastMessageId, e.LastTurnStartedAtMs);
         }).ToArray();
     }
     public SessionActivity Read()
@@ -113,7 +113,7 @@ internal sealed class SessionActivityLedger
                     JsonValue.String(state, "title") ?? JsonValue.String(state, "fallbackSearchTitle"), JsonValue.String(state, "resumeState"),
                     last.ValueKind == JsonValueKind.Object ? JsonValue.String(last, "turnId") : null,
                     last.ValueKind == JsonValueKind.Object ? JsonValue.String(last, "status") : null, JsonValue.String(state, "latestTurnStartMessageId"),
-                    turns.ValueKind == JsonValueKind.Array ? turns.GetArrayLength() - 1 : -1, updatedAt);
+                    turns.ValueKind == JsonValueKind.Array ? turns.GetArrayLength() - 1 : -1, updatedAt, last.ValueKind==JsonValueKind.Object?JsonValue.Long(last,"turnStartedAtMs"):null);
                 return false;
             }
             if (type != "patches") throw new System.IO.InvalidDataException("Unsupported session change.");

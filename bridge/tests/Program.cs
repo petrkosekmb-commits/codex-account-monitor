@@ -12,6 +12,7 @@ static JsonElement Snapshot(long revision,long? updatedAt,bool waiting)
 }
 static SessionActivityLedger Ledger(){var l=new SessionActivityLedger();l.Discover("chat","owner");l.CompleteDiscovery();return l;}
 static void Check(bool condition,string label){if(!condition)throw new Exception(label);Console.WriteLine("PASS "+label);}
+if(args.FirstOrDefault()=="--desktop-close-fixture"){DesktopCloseFixture.Run(args.ElementAtOrDefault(1)=="refuse");return;}
 var ledger=Ledger();
 ledger.Apply("chat","owner",Snapshot(1200,1000,true));
 ledger.Apply("chat","owner",Snapshot(470,2000,false));
@@ -52,4 +53,5 @@ Check(AccountErrors.Describe(AccountErrors.Expired)!.Contains("Přihlášení vy
 Check(AccountErrors.Describe(AccountErrors.InvalidFormat)!.Contains("neplatný formát"),"invalid response format has a fixed message");
 Check(AccountErrors.Describe(AccountErrors.Connection)!.Contains("připojení"),"usage connection failure is distinct from expired login");
 Check(!AccountErrors.Describe("access_token=synthetic-secret")!.Contains("synthetic-secret"),"unknown errors never expose raw secret-bearing messages");
-Console.WriteLine("18 regression checks passed");
+if(OperatingSystem.IsWindows())await DesktopCloseFixture.VerifyAsync();
+Console.WriteLine("20 regression checks passed");
