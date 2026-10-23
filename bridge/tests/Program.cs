@@ -54,4 +54,9 @@ Check(AccountErrors.Describe(AccountErrors.InvalidFormat)!.Contains("neplatný f
 Check(AccountErrors.Describe(AccountErrors.Connection)!.Contains("připojení"),"usage connection failure is distinct from expired login");
 Check(!AccountErrors.Describe("access_token=synthetic-secret")!.Contains("synthetic-secret"),"unknown errors never expose raw secret-bearing messages");
 if(OperatingSystem.IsWindows())await DesktopCloseFixture.VerifyAsync();
-Console.WriteLine("20 regression checks passed");
+Console.WriteLine("24 regression checks passed");
+
+Check(ChatTitle.Resolve(null,"Captured title")=="Captured title","unnamed canonical chat preserves captured desktop title");
+Check(ChatTitle.Resolve("Stored name","Captured title")=="Stored name","explicit stored chat name takes precedence");
+Check(ChatTitle.Resolve(" ","Captured title")=="Captured title","blank canonical name uses captured title");
+try{ChatTitle.Resolve(null," ");throw new Exception("Missing title accepted");}catch(InvalidDataException){Console.WriteLine("PASS missing titles fail before account changes");}

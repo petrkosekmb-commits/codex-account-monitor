@@ -18,6 +18,7 @@
   "bridge/AccountErrors.cs",
   "bridge/AccountSwitchBridge.csproj",
   "bridge/Build.ps1",
+  "bridge/ChatTitle.cs",
   "bridge/DesktopClose.cs",
   "bridge/DesktopLaunch.cs",
   "bridge/LICENSE-codex-switch.txt",

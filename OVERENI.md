@@ -1,3 +1,9 @@
+# Ověření opravy 0.2.7
+
+Živá kontrola našla přechod zastavený ve fázi BackingUp bez změny účtu a bez odeslání pokračování. Vybraný chat měl prázdné pole name v thread/read, ale platný název v zachyceném stavu desktopu. Pomocník nyní zachovává tento název bez přejmenování. Chybějí-li oba názvy, přechod se stále zastaví před změnou účtu. Automatika ukazuje konkrétní fázi nedokončeného přechodu.
+
+Prošlo 47 testů soukromé edice, 49 testů veřejné edice a 24 kontrol pomocníka .NET. Regrese zahrnují prázdný název, přednost uloženého názvu a odmítnutí chatu bez ověřeného názvu. Skutečné přepnutí během dalších běžících úloh nebylo při této opravě vyvoláváno; úplné ověření automatiky při skutečném vyčerpání zůstává otevřené.
+
 # Ověření verze 0.2.6
 
 Prošlo všech 46 testů soukromé edice, 48 testů veřejné edice a 20 regresních kontrol každého sestaveného pomocníka .NET. Nové kontroly ověřují výměnu účtu se zálohou přesných původních dat, zachování historie podle identity při změně pořadí, vypnutí automatiky, prázdné údaje nového účtu, blokaci nedokončeného přechodu a odmítnutí poškozené konfigurace. Veřejný distribuční seznam obsahuje pouze příkladové adresy example.com.

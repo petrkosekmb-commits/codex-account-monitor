@@ -4,7 +4,8 @@ export async function automaticSwitch({state,switcher,save,switchAccount,now=Dat
   const auto=state.automation??={enabled:false,attempts:{},status:'off'};
   const pause=message=>{auto.status=auto.enabled?'waiting':'off';auto.message=message;return false;};
   if(!auto.enabled)return pause('Automatické přepínání je vypnuté.');
-  if(!switcher?.ready||!switcher.desktop||switcher.switching||switcher.pending)return pause('Čekám na ověřené spojení a dokončení připraveného přechodu.');
+  if(switcher?.pending)return pause('Přepínání blokuje nedokončený přechod ve fázi '+switcher.pending.phase+'. Ověř jeho stav v přehledu a obnov jej nebo zruš, pokud ještě nezměnil účet.');
+  if(!switcher?.ready||!switcher.desktop||switcher.switching)return pause('Čekám na ověřené spojení s aplikací Codex.');
   if(switcher.threads?.some(t=>t.waiting))return pause('Nejdřív dokonči čekající schválení nebo odpověď v Codexu.');
   const source=state.slots.find(s=>sameEmail(s.email,state.activeEmail));
   if(!source||availability(source,now).status!=='exhausted')return pause('Čekám na potvrzené vyčerpání právě používaného účtu.');

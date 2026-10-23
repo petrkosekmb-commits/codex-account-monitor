@@ -15,7 +15,7 @@ foreach ($entry in $entries) {
     }
 }
 New-Item -ItemType Directory -Path (Join-Path $installPath 'bridge') -Force | Out-Null
-foreach($entry in @('Program.cs','AccountErrors.cs','DesktopLaunch.cs','DesktopClose.cs','AccountSwitchBridge.csproj','Build.ps1','LICENSE-codex-switch.txt','.gitignore','compat','tests','publish')) {
+foreach($entry in @('Program.cs','ChatTitle.cs','AccountErrors.cs','DesktopLaunch.cs','DesktopClose.cs','AccountSwitchBridge.csproj','Build.ps1','LICENSE-codex-switch.txt','.gitignore','compat','tests','publish')) {
     $from=Join-Path (Join-Path $PSScriptRoot 'bridge') $entry
     if(Test-Path -LiteralPath $from){Copy-Item -LiteralPath $from -Destination (Join-Path $installPath 'bridge') -Recurse}
 }

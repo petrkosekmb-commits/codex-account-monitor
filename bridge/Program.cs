@@ -185,7 +185,7 @@ internal sealed class PreservingBackend:IAccountSwitchBackend
         Metadata??=new CodexRpc(Service.Installation.CliPath,Service.CodexHome,true);
         if(Metadata.Initialization==null)await Metadata.InitializeAsync(c);
         var r=await Metadata.RequestAsync("thread/read",new{threadId=chat.Id,includeTurns=false},c);
-        var title=JsonValue.String(r.GetProperty("thread"),"name");if(string.IsNullOrWhiteSpace(title))throw new InvalidDataException();
+        var title=ChatTitle.Resolve(JsonValue.String(r.GetProperty("thread"),"name"),chat.OriginalTitle);
         // The encrypted handoff keeps the original name. No date prefix or user-visible rename.
         chat.OriginalTitle=title;chat.BackupTitle=title;
     }

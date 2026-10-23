@@ -20,3 +20,8 @@ test('completed and old failed chats are not restarted',async()=>{for(const chan
 test('same exhausted window gets only one attempt across repeated checks',async()=>{const x=setup();await automaticSwitch(x.options);await automaticSwitch(x.options);assert.equal(x.calls.length,1);});
 test('unknown switch outcome disables automation without retry',async()=>{const x=setup();x.options.switchAccount=async()=>{x.calls.push('attempt');throw new Error('unknown');};await automaticSwitch(x.options);await automaticSwitch(x.options);assert.equal(x.state.automation.enabled,false);assert.equal(x.state.automation.status,'off');assert.equal(x.calls.length,1);});
 test('unverified targets are never selected and credits do not make an exhausted account available',async()=>{const x=setup();x.state.slots[1].error='bad';x.state.slots[2].snapshot.checkedAt=now-700000;x.state.slots[3].snapshot.limits.credits.hasCredits=true;await automaticSwitch(x.options);assert.deepEqual(x.calls,[]);});
+test('pending transition shows its exact blocking phase without another attempt',async()=>{
+  const state={automation:{enabled:true}};
+  const changed=await automaticSwitch({state,switcher:{pending:{phase:'BackingUp'}},save:async()=>{},switchAccount:async()=>{throw new Error('Must not switch');}});
+  assert.equal(changed,false);assert.match(state.automation.message,/BackingUp/);assert.match(state.automation.message,/nedokončený/);
+});
