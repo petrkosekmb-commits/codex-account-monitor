@@ -62,7 +62,7 @@ internal sealed class AccountService
         var policy = client == null ? null : await client.RequireFileAsync(cancellation).ConfigureAwait(false);
         var installation = client?.Installation ?? await RuntimeLocator.FindAsync(cancellation).ConfigureAwait(false);
         if (policy != null && CanonicalAuthExists()) LinuxClientSession.RequireFile(policy, AuthDocument.Parse(ReadCanonicalAuth()).AccountId);
-        await Task.Run(() => RuntimeHome.CleanupStale(Vault.DirectoryPath), cancellation).ConfigureAwait(false);
+        await Task.Run(() => { RuntimeHome.RecoverStale(Vault, CanonicalAuthExists() ? ReadCanonicalAuth() : null); RuntimeHome.CleanupStale(Vault.DirectoryPath); }, cancellation).ConfigureAwait(false);
         lock (Vault.SyncRoot) { Installation = installation; SynchronizeCurrentCore(policy); Vault.Save(); }
         Changed?.Invoke();
     }
@@ -141,19 +141,28 @@ internal sealed class AccountService
             // Its access token is sufficient for a read-only usage request; never
             // start a second authenticated app-server with a copy of its refresh token.
             var activeAuth = CanonicalAuthExists() ? ReadCanonicalAuth() : null;
-            if (SessionCredentialPolicy.IsDesktopOwned(key, profile.RequiresApply, activeAuth))
+            try
             {
-                var activeUsage = await ActiveUsageClient.ReadAsync(activeAuth!, profile.AccountId, cancellation).ConfigureAwait(false);
+                // Routine usage reads never start another token-refreshing process.
+                var owned = SessionCredentialPolicy.IsDesktopOwned(key, profile.RequiresApply, activeAuth);
+                var activeUsage = await ActiveUsageClient.ReadAsync(owned ? activeAuth! : authJson, profile.AccountId, cancellation).ConfigureAwait(false);
                 lock (Vault.SyncRoot)
                 {
                     if (!IsCurrentRevision(profile, revision)) return;
                     var latest = CanonicalAuthExists() ? ReadCanonicalAuth() : null;
-                    if (latest == null || AuthDocument.Parse(latest).Key != key) return;
-                    Vault.Upsert(latest);
+                    if (owned)
+                    {
+                        if (latest == null || AuthDocument.Parse(latest).Key != key) return;
+                        Vault.Upsert(latest);
+                    }
                     profile.Usage = activeUsage; profile.Error = null;
                     UsageHistory.Record(profile, activeUsage); Vault.Save();
                 }
                 return;
+            }
+            catch (SessionCredentialException error) when (error.Code == SessionCredentialPolicy.RefreshPending)
+            {
+                if (SessionCredentialPolicy.IsDesktopOwned(key, profile.RequiresApply, CanonicalAuthExists() ? ReadCanonicalAuth() : null)) throw;
             }
             await using var home = new RuntimeHome(Vault.DirectoryPath, authJson);
             UsageSnapshot? usage = null;
@@ -161,22 +170,12 @@ internal sealed class AccountService
             try
             {
                 await using var rpc = await OpenAccountRpcAsync(home.Path, client, workspace, cancellation).ConfigureAwait(false);
-                JsonElement accountResult;
-                try { accountResult = await rpc.RequestAsync("account/read", new { refreshToken = false }, cancellation).ConfigureAwait(false); }
-                catch (CodexRequestException error) when (error.Operation == "account/read" && error.Message.Contains("401", StringComparison.Ordinal))
-                {
-                    if (SessionCredentialPolicy.IsDesktopOwned(key, profile.RequiresApply, CanonicalAuthExists() ? ReadCanonicalAuth() : null))
-                        throw new SessionCredentialException(SessionCredentialPolicy.RefreshPending);
-                    accountResult = await rpc.RequestAsync("account/read", new { refreshToken = true }, cancellation).ConfigureAwait(false);
-                }
-                if (!accountResult.TryGetProperty("account", out var info) || info.ValueKind != JsonValueKind.Object || JsonValue.String(info, "type") != "chatgpt")
-                    throw new SessionCredentialException("session_account_unavailable");
-                var response = await InactiveUsageReader.ReadAsync(
+                var response = await InactiveUsageReader.RenewAsync(
                     (method, parameters) => rpc.RequestAsync(method, parameters, cancellation),
                     () => !SessionCredentialPolicy.IsDesktopOwned(key, profile.RequiresApply, CanonicalAuthExists() ? ReadCanonicalAuth() : null),
                     profile.Email).ConfigureAwait(false);
                 usage = UsageSnapshot.Parse(response, profile.AccountId);
-                email = JsonValue.String(info, "email"); plan = JsonValue.String(info, "planType");
+                email = profile.Email; plan = profile.Plan;
             }
             finally
             {
@@ -199,6 +198,7 @@ internal sealed class AccountService
                             revision = profile.CredentialRevision;
                         }
                     }
+                    home.CredentialsSaved();
                 }
             }
             lock (Vault.SyncRoot)
@@ -307,7 +307,7 @@ internal sealed class AccountService
             string? workspace;
             lock (Vault.SyncRoot) workspace = Vault.Data.Accounts.Find(a => a.Key == key)?.AccountId;
             await using var client = await OpenLinuxAsync(cancellation, workspace).ConfigureAwait(false);
-            var installation = client?.Installation ?? await RuntimeLocator.FindAsync(cancellation).ConfigureAwait(false);
+            var installation = client?.Installation ?? (File.Exists(Installation.CliPath) && File.Exists(Installation.DesktopPath) ? Installation : await RuntimeLocator.FindAsync(cancellation).ConfigureAwait(false));
             bool Running() => OperatingSystem.IsLinux() ? LinuxDesktopRuntime.Running(cancellation).Length != 0 ||
                 requireCliQuiescence && LinuxTerminalProcesses.AnyRunning(client!.InspectionProcessId, installation.CliPath, cancellation) :
                 desktopRunning?.Invoke() ?? RuntimeLocator.IsDesktopRunning(installation.DesktopPath);

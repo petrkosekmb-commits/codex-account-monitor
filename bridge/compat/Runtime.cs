@@ -10,15 +10,18 @@ internal sealed class RuntimeHome : IAsyncDisposable
 {
     public string Path { get; }
     private readonly string _root;
+    private bool _preserve;
+    internal void CredentialsSaved() => _preserve=false;
     public RuntimeHome(string dataDirectory, string? authJson)
     {
+        _preserve=authJson!=null;
         _root = System.IO.Path.Combine(dataDirectory, "runtime");
         Directory.CreateDirectory(_root);
         Path = System.IO.Path.Combine(_root, Guid.NewGuid().ToString("N"));
         SecureFiles.CreatePrivateDirectory(Path);
         if (authJson != null) SecureFiles.AtomicWriteText(System.IO.Path.Combine(Path, "auth.json"), authJson);
         using var owner = Process.GetCurrentProcess();
-        SecureFiles.AtomicWriteText(System.IO.Path.Combine(Path, "owner.json"), JsonSerializer.Serialize(new { pid = owner.Id, startedAt = owner.StartTime.ToUniversalTime().Ticks }));
+        SecureFiles.AtomicWriteText(System.IO.Path.Combine(Path, "owner.json"), JsonSerializer.Serialize(new { pid = owner.Id, startedAt = owner.StartTime.ToUniversalTime().Ticks, sourceAuthHash = authJson == null ? null : Hash(authJson) }));
     }
     public string ReadAuth()
     {
@@ -27,6 +30,7 @@ internal sealed class RuntimeHome : IAsyncDisposable
     }
     public async ValueTask DisposeAsync()
     {
+        if(_preserve)return; // Keep an uncommitted rotation available for startup recovery.
         // Windows may release the child process file handles shortly after exit.
         // Preserve the account query/refresh result instead of replacing it with
         // an unrelated temporary-directory cleanup exception.
@@ -37,6 +41,37 @@ internal sealed class RuntimeHome : IAsyncDisposable
             catch(UnauthorizedAccessException) { if(attempt<3)await Task.Delay(150); }
         }
         // Owner metadata is retained; CleanupStale can remove it on next start.
+    }
+    internal static string Hash(string value) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(value)));
+    internal static bool CanRecover(string expectedHash, string current, string candidate)
+        => Hash(current)==expectedHash && AuthDocument.Parse(current).Key==AuthDocument.Parse(candidate).Key;
+    public static void RecoverStale(AccountVault vault, string? canonical)
+    {
+        var root=System.IO.Path.Combine(vault.DirectoryPath,"runtime");
+        if(!Directory.Exists(root))return;
+        foreach(var directory in Directory.GetDirectories(root))
+        {
+            if(!Guid.TryParseExact(System.IO.Path.GetFileName(directory),"N",out _))continue;
+            var ownerFile=System.IO.Path.Combine(directory,"owner.json");
+            var authFile=System.IO.Path.Combine(directory,"auth.json");
+            if(!File.Exists(ownerFile)||!File.Exists(authFile))continue;
+            using var owner=JsonDocument.Parse(File.ReadAllText(ownerFile));
+            var pid=JsonValue.Int(owner.RootElement,"pid"); var ticks=JsonValue.Long(owner.RootElement,"startedAt");
+            var hash=JsonValue.String(owner.RootElement,"sourceAuthHash");
+            if(pid==null||ticks==null||hash==null)continue;
+            try { using var process=Process.GetProcessById(pid.Value); if(process.StartTime.ToUniversalTime().Ticks==ticks)continue; }
+            catch(ArgumentException) { }
+            var candidate=File.ReadAllText(authFile);
+            var identity=AuthDocument.Parse(candidate);
+            lock(vault.SyncRoot)
+            {
+                var profile=vault.Data.Accounts.Find(a=>a.Key==identity.Key);
+                if(profile==null||SessionCredentialPolicy.IsDesktopOwned(profile.Key,profile.RequiresApply,canonical))continue;
+                // Recover only a child of the exact credential revision still in the vault.
+                // Never replace a newer login or the active desktop's session with an orphan.
+                if(CanRecover(hash,profile.AuthJson,candidate)) { vault.Upsert(candidate); vault.Save(); }
+            }
+        }
     }
     public static void CleanupStale(string dataDirectory)
     {

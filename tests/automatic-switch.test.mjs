@@ -25,6 +25,17 @@ test('pending transition shows its exact blocking phase without another attempt'
   const changed=await automaticSwitch({state,switcher:{pending:{phase:'BackingUp'}},save:async()=>{},switchAccount:async()=>{throw new Error('Must not switch');}});
   assert.equal(changed,false);assert.match(state.automation.message,/BackingUp/);assert.match(state.automation.message,/nedokončený/);
 });
-test('completed pinned chat does not block the only ongoing chat',async()=>{const x=setup();x.state.automation.threadId='old';x.switcher.threads.push({id:'old',status:'idle',lastTurnStatus:'completed'});await automaticSwitch(x.options);assert.deepEqual(x.calls,[[3,'chat']]);});
-test('multiple ongoing chats prevent an automatic restart even with a preferred chat',async()=>{const x=setup();x.state.automation.threadId='chat';x.switcher.threads.push({id:'other',status:'active'});await automaticSwitch(x.options);assert.deepEqual(x.calls,[]);assert.deepEqual(x.state.automation.attempts,{});});
-test('missing completion is not reported as successful switching',async()=>{const x=setup();x.options.switchAccount=async()=>{};await automaticSwitch(x.options);assert.equal(x.state.automation.enabled,false);assert.equal(x.state.automation.status,'error');});
+
+test('a long-running turn that just failed remains eligible for automatic continuation',async()=>{
+ const x=setup();x.switcher.threads[0].lastTurnId='long';x.switcher.threads[0].lastTurnStartedAtMs=now-3600000;
+ x.state.automation.observedTurns={chat:{turnId:'long',status:'inProgress'}};
+ assert.equal(await automaticSwitch(x.options),true);assert.deepEqual(x.calls,[[3,'chat']]);
+});
+test('a pinned completed chat cannot suppress the single unfinished chat',async()=>{
+ const x=setup();x.state.automation.threadId='finished';x.switcher.threads.push({id:'finished',status:'idle',lastTurnStatus:'completed'});
+ assert.equal(await automaticSwitch(x.options),true);assert.deepEqual(x.calls,[[3,'chat']]);
+});
+test('multiple active chats prevent restarting unrelated work',async()=>{
+ const x=setup();x.switcher.threads.push({id:'other',status:'active',lastTurnStatus:'inProgress'});
+ assert.equal(await automaticSwitch(x.options),false);assert.deepEqual(x.calls,[]);
+});

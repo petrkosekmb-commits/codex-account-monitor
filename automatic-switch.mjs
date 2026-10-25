@@ -7,9 +7,18 @@ export async function automaticSwitch({state,switcher,save,switchAccount,now=Dat
   if(switcher?.pending)return pause('Přepínání blokuje nedokončený přechod ve fázi '+switcher.pending.phase+'. Ověř jeho stav v přehledu a obnov jej nebo zruš, pokud ještě nezměnil účet.');
   if(!switcher?.ready||!switcher.desktop||switcher.switching)return pause('Čekám na ověřené spojení s aplikací Codex.');
   if(switcher.threads?.some(t=>t.waiting))return pause('Nejdřív dokonči čekající schválení nebo odpověď v Codexu.');
+  // Track the failure transition, not the start of a potentially long-running turn.
+  const previous=auto.observedTurns??{};
+  auto.observedTurns=Object.fromEntries((switcher.threads??[]).map(t=>{
+    const old=previous[t.id];
+    const same=!!old&&old.turnId===t.lastTurnId;
+    const failed=['failed','interrupted'].includes(t.lastTurnStatus);
+    const failedAt=failed?(same&&old.status==='inProgress'?now:same?old.failedAt:null):null;
+    return [t.id,{turnId:t.lastTurnId,status:t.lastTurnStatus,failedAt}];
+  }));
   const source=state.slots.find(s=>sameEmail(s.email,state.activeEmail));
   if(!source||availability(source,now).status!=='exhausted')return pause('Čekám na potvrzené vyčerpání právě používaného účtu.');
-  const eligible=(switcher.threads||[]).filter(t=>!t.waiting&&(t.status==='active'||t.goal==='usageLimited'||['failed','interrupted'].includes(t.lastTurnStatus)&&t.lastTurnStartedAtMs>=now-10*60*1000));
+  const eligible=(switcher.threads||[]).filter(t=>!t.waiting&&(t.status==='active'||t.goal==='usageLimited'||['failed','interrupted'].includes(t.lastTurnStatus)&&(auto.observedTurns[t.id]?.failedAt??t.lastTurnStartedAtMs)>=now-10*60*1000));
   const preferred=eligible.find(t=>t.id===auto.threadId);
   const selected=preferred??(eligible.length===1?eligible[0]:null);
   if(eligible.length>1)return pause('Více chatů je rozpracovaných. Přepnutí by přerušilo další práci; nejdřív ji dokonči.');

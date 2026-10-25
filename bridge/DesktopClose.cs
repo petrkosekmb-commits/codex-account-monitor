@@ -1,3 +1,4 @@
+using CodexAccountDesk;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
@@ -17,7 +18,7 @@ internal static class DesktopClose
         {
             foreach(var process in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(executable)))
             {
-                try { if(string.Equals(process.MainModule?.FileName,executable,StringComparison.OrdinalIgnoreCase))matching.Add(process);else process.Dispose(); }
+                try { if(string.Equals(WindowsProcessImage.Read(process),executable,StringComparison.OrdinalIgnoreCase))matching.Add(process);else process.Dispose(); }
                 catch(InvalidOperationException){process.Dispose();}
             }
             if(matching.Count==0)return;

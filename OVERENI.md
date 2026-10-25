@@ -1,3 +1,12 @@
+# Ověření 0.2.10 / Verification
+
+Dne 25. října 2026 místní opravená instalace úspěšně dokončila skutečný ruční přechod a řízený automatický přechod mezi dvěma účty. Ověřena cílová identita, opětovné otevření desktopu, stejný chat, nový běžící tah, právě jeden požadavek a odstranění nedokončeného přechodu. Kontrola pokračování sledovala běh přibližně 90 sekund. Automatický test použil pouze syntetický signál vyčerpání v paměti, nikoli změnu skutečných limitů.
+
+Dřívější neúspěšné pokusy nejsou označeny jako úspěch. Odhalily chybu čtení modulů procesu a příliš přísné odmítnutí dočasně nedostupného snímku. Obě opravy mají regresní ověření. Poslední výzva k novému přihlášení byla rozpracovaná přihlašovací operace; původní relace prošla další kontrolou bez nového přihlášení. To nevysvětluje všechny historické případy zrušení tokenu.
+
+On 25 October 2026 the local repaired installation completed manual and controlled automatic handoffs, checking target identity, desktop reopening, the same chat, one new running continuation and cleared pending state. Verification observed continuation for approximately 90 seconds. Automatic triggering used an in-memory synthetic exhaustion signal. Long-term login stability and natural exhaustion are not proven. Earlier failed attempts remain failures; production logs, personal identities and credentials are excluded from this repository.
+
+---
 # Ověření 0.2.9 / Verification
 
 Místní opravená instalace prošla přepnutím mezi dvěma účty a zpět (přibližně 48 a 56 sekund). Oba přechody zachovaly název chatu, každý vyvolal právě jedno pokračování, nezůstal nedokončený přechod a nastavení automatiky bylo obnoveno. Syntetické vyčerpání na kopii živého stavu vybralo vhodný účet a aktuální chat bez změny provozních limitů. Toto není živý test skutečného vyčerpání.
@@ -29,3 +38,5 @@ Kruhový odpočet a platnost předplatného byly zkontrolovány také v místní
 Distribuce 0.2.9: všech 55 testů Node prošlo v každé edici, včetně kontroly distribučního seznamu. / All 55 Node tests passed in each edition, including the distribution allowlist check.
 
 Distribuce 0.2.9: 55 testů Node v každé edici, sestavení obou pomocníků a protokolové i přihlašovací regrese prošly. / Both editions passed 55 Node tests, helper builds and protocol/credential regression suites.
+
+Veřejná varianta 0.2.10: 64 testů Node, sestavení pomocníka, protokolové regrese a regrese přihlášení prošly. Distribuční seznam prošel kontrolou osobních adres a vzorů tajných údajů. / Public variant: all 64 Node tests, helper build, protocol and credential regression suites passed; distribution privacy checks passed.

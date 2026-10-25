@@ -128,13 +128,23 @@ async function cancelLogin(){
 }
 function publicView(){const result=view(state);result.automation=state.automation??{enabled:false,status:"off"};result.activeError=state.activeError??null;result.login=login?{id:login.id,status:login.status,url:login.url??null,message:login.message??null}:null;
   result.switcher={installed:!!switcher,ready:!!switcherView?.ready,desktop:!!switcherView?.desktop,error:switcherError,switching,
-    threads:switcherView?.threads??[],pending:switcherView?.pending??null,lastSwitch:state.lastSwitch??null};return result;}
+    threads:switcherView?.threads??[],pending:switcherView?.pending??null,lastSwitch:state.lastSwitch??null,history:state.switchHistory??[]};return result;}
 async function switchAccount(id,threadId,resume=false){
   if(!switcher||!switcherView?.ready||switching||busy||login?.bridge||login?.rpc)throw new Error('Přepínač není připravený nebo právě probíhá jiná operace.');
   const slot=state.slots.find(s=>s.id===id);if(!slot?.connected)throw new Error('Nejdřív jednou přihlas vybraný účet.');
+  if(resume){
+    const chats=switcherView?.pending?.chats??[];
+    if(chats.length!==1)throw new Error('Připravený přechod nemá jednoznačně určený chat.');
+    threadId=chats[0].id;
+  }else if(!threadId){
+    const chats=(switcherView?.threads??[]).filter(t=>t.status==='active'||['failed','interrupted'].includes(t.lastTurnStatus)||t.goal==='active');
+    if(chats.length!==1)throw new Error('Vyber jeden rozpracovaný chat pro pokračování.');
+    threadId=chats[0].id;
+  }
+  const beforeTurnId=switcherView?.threads?.find(t=>t.id===threadId)?.lastTurnId;
   switching=true;busy=true;
   try{
-    const result=await runSwitch({state,id,threadId,resume,save,
+    const result=await runSwitch({state,id,threadId,resume,save,beforeTurnId,expectedEmail:slot.email,
       request:(method,selected)=>switcher.request(method,method==='status'?{}:{email:slot.email,threadId:selected},method==='status'?10000:11*60*1000),
       apply:result=>{switcherView=result;applySwitcherView();}});
     if(result.ok)switcherError=null;
@@ -175,10 +185,16 @@ const server=http.createServer(async(req,res)=>{
       let body='';for await(const chunk of req){body+=chunk;if(body.length>1024)return send(413,{error:'Příliš dlouhý požadavek.'});}
       const {id,threadId}=JSON.parse(body);
       if(!Number.isInteger(id)||id<1||id>4||threadId&& !/^[a-f0-9-]{36}$/i.test(threadId))return send(400,{error:'Neplatný účet nebo úloha.'});
+      const rejectSwitch=async error=>{
+        state.switchHistory=[...(state.switchHistory??[]),{id,threadId,requestedAt:Date.now(),status:'error',phase:'Rejected',accountApplied:false,error}].slice(-20);
+        await save();return send(409,{error});
+      };
       const target=state.slots.find(s=>s.id===id);
-      if(req.url==='/api/switch'&&(sameEmail(target?.email,state.activeEmail)||target?.error))return send(409,{error:'Vyber jiný účet s ověřeným přihlášením.'});
-      if(switcherView?.threads?.some(t=>t.waiting))return send(409,{error:'Codex hlásí čekání na schválení nebo odpověď. Vyčkej na dokončení probíhající odpovědi a případně vyřeš požadavek v uvedeném chatu.'});
-      if(!switcherView?.ready||!switcherView?.desktop||!state.slots.find(s=>s.id===id)?.connected||busy||switching||login?.bridge||login?.rpc)return send(409,{error:'Nejdřív připoj účet a vyčkej na ověření spojení s Codexem.'});
+      if(req.url==='/api/switch'&&switcherView?.pending)return rejectSwitch('Předchozí přechod čeká na vyřešení. Použij jeho obnovení nebo zrušení v horní části přehledu.');
+      if(req.url==='/api/switch'&&!threadId&&(switcherView?.threads??[]).filter(t=>t.status==='active'||['failed','interrupted'].includes(t.lastTurnStatus)||t.goal==='active').length!==1)return rejectSwitch('Vyber konkrétní rozpracovaný chat pro pokračování.');
+      if(req.url==='/api/switch'&&(sameEmail(target?.email,state.activeEmail)||target?.error))return rejectSwitch('Vyber jiný účet s ověřeným přihlášením.');
+      if(switcherView?.threads?.some(t=>t.waiting))return rejectSwitch('Codex hlásí čekání na schválení nebo odpověď. Vyčkej na dokončení probíhající odpovědi a případně vyřeš požadavek v uvedeném chatu.');
+      if(!switcherView?.ready||!switcherView?.desktop||!state.slots.find(s=>s.id===id)?.connected||busy||switching||login?.bridge||login?.rpc)return rejectSwitch('Nejdřív připoj účet a vyčkej na ověření spojení s Codexem.');
       void switchAccount(id,threadId,req.url==='/api/resume').catch(()=>{});return send(202,{requested:true});
     }
     if(req.url==='/api/cancel'&&req.method==='POST'){await cancelLogin();return send(200,{ok:true});}

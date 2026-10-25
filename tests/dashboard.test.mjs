@@ -29,7 +29,7 @@ test('ručně lze vybrat neukončený neaktivní chat, dokončený chat se nenab
 test('stará chyba je historie a neblokuje nový pokus',async()=>{
   const d=dashboard();await d.ready();
   vm.runInContext("state.switcher.lastSwitch={status:'error',error:'Stará blokace',requestedAt:1};draw()",d.context);
-  assert.match(d.elements.get('switcher').innerHTML,/<details><summary>Předchozí pokus/);
+  assert.match(d.elements.get('switcher').innerHTML,/<details(?: open)?><summary>Předchozí pokus/);
   assert.doesNotMatch(d.elements.get('cards').innerHTML,/data-switch="3" disabled/);
 });
 test('tlačítko odešle účet a chat, chyba přežije pravidelnou obnovu',async()=>{
@@ -59,3 +59,12 @@ test('otevřená stránka obnoví oprávnění po restartu přehledu',async()=>{
 test('kruhovy odpocet ukazuje zbyvajici cas a omezuje vysec na jeden cyklus',async()=>{const d=dashboard();await d.ready();const run=s=>vm.runInContext(s,d.context);assert.match(run('resetClock({duration:300,resetsAt:1000+9000},false,1000000)'),/--remaining:0.5/);assert.match(run('resetClock({duration:300,resetsAt:1000+9000},false,1000000)'),/2 h 30 m/);assert.match(run('resetClock({duration:300,resetsAt:999},false,1000000)'),/ověřit obnovu/);assert.match(run('resetClock({duration:null,resetsAt:null},false,1000000)'),/Neznámý/);assert.match(run('resetClock({duration:300,resetsAt:100000},true,1000000)'),/--remaining:1/);assert.match(run('resetClock({duration:300,resetsAt:100000},true,1000000)'),/Poslední známý údaj/);});
 
 test('predplatne pouziva pouze znamou platnost a nevymysli dalsi platbu',async()=>{const d=dashboard();await d.ready();const run=s=>vm.runInContext(s,d.context);assert.match(run('subscriptionInfo({snapshot:{plan:"plus"},subscription:{activeUntil:2000000000000,checkedAt:1900000000000}})'),/aktivní do:/);assert.match(run('subscriptionInfo({})'),/služba neposkytla/);assert.match(run('subscriptionInfo({subscription:{activeUntil:null}})'),/automatické prodloužení: není ověřeno/);assert.match(run('subscriptionInfo({subscription:{activeUntil:1}})'),/vyžaduje ověření/);});
+
+test('healthy exhausted account explains limit and keeps optional sign-in inside management',async()=>{
+ const d=dashboard();await d.ready();vm.runInContext("state.slots[0].availability={status:'exhausted',label:'Vyčerpáno'};draw()",d.context);
+ const html=d.elements.get('cards').innerHTML;assert.match(html,/<details><summary>Správa přihlášení/);assert.match(html,/Nové přihlášení limit neobnoví/);assert.doesNotMatch(html,/Obnovit neplatné přihlášení/);
+});
+test('confirmed revoked account keeps actionable login button',async()=>{
+ const d=dashboard();await d.ready();vm.runInContext("state.slots[0].requiresReauthentication=true;draw()",d.context);
+ assert.match(d.elements.get('cards').innerHTML,/Obnovit neplatné přihlášení/);assert.doesNotMatch(d.elements.get('cards').innerHTML,/<summary>Správa přihlášení/);
+});

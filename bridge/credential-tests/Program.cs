@@ -43,6 +43,47 @@ calls.Clear();queryCount=0;
 try{await InactiveUsageReader.ReadAsync(RecoverRequest,()=>false,"one@example.com");throw new Exception("active refresh allowed");}catch(SessionCredentialException e){Check(e.Code==SessionCredentialPolicy.RefreshPending&&calls.Count==1,"ownership change to active prevents refresh of a copied registration");}
 var repeated=0;
 try{await InactiveUsageReader.ReadAsync((method,p)=>{if(method=="account/read")return Task.FromResult(accountReply);repeated++;throw new CodexRequestException("401 Unauthorized","account/rateLimits/read");},()=>true,"one@example.com");throw new Exception("loop not bounded");}catch(CodexRequestException){Check(repeated==2,"failed inactive refresh cannot produce an unbounded retry loop");}
+var missingCalls=0;
+try { await InactiveUsageReader.RenewAsync((m,p)=>{missingCalls++;return Task.FromResult(JsonSerializer.SerializeToElement(new {account=(object?)null}));},()=>true,"one@example.com"); throw new Exception("Null account accepted"); }
+catch(SessionCredentialException e){Check(e.Code==SessionCredentialPolicy.Retry && missingCalls==2,"null account alone is transient; one bounded usage probe follows renewal");}
+try { await InactiveUsageReader.RenewAsync((m,p)=>throw new CodexRequestException("refresh_token_reused",m),()=>true,"one@example.com"); throw new Exception("Revoked grant accepted"); }
+catch(CodexRequestException e){Check(SessionCredentialPolicy.ClassifyFailure(e.Message)==SessionCredentialPolicy.Reauthenticate,"renewal preserves confirmed terminal errors");}
+var revokedCalls=new List<string>();
+try { await InactiveUsageReader.RenewAsync((m,p)=>{revokedCalls.Add(m);if(m=="account/read")return Task.FromResult(JsonSerializer.SerializeToElement(new{account=(object?)null}));throw new CodexRequestException("401 token_revoked",m);},()=>true,"one@example.com");throw new Exception("Revoked session accepted"); }
+catch(SessionCredentialException e){Check(e.Code==SessionCredentialPolicy.Reauthenticate && revokedCalls.Count==2,"revoked token after attempted renewal produces actionable reauthentication");}
+var rotated=auth.Replace("synthetic-refresh","rotated-refresh");
+Check(RuntimeHome.CanRecover(RuntimeHome.Hash(auth),auth,rotated),"orphaned rotation can recover only from the exact previous credential");
+Check(!RuntimeHome.CanRecover(RuntimeHome.Hash(auth),rotated,auth),"old orphan cannot roll back a newer credential");
+Check(!RuntimeHome.CanRecover(RuntimeHome.Hash(auth),auth,Auth("other")),"orphan cannot change account identity");
+Check(!AccountErrors.Describe("session_account_unavailable")!.Contains("jednorázově"),"empty account no longer claims a proven logout");
+var pending=new AccountSwitchPlan{SourceAccountKey="source",TargetAccountKey="target",Phase=SwitchPhase.Applying,Chats=new(){new SwitchChat{ResumeState=ChatResumeState.Pending}}};
+Check(SwitchRecovery.CanDismiss(pending,"source"),"unapplied failed switch can be dismissed when source identity still matches");
+Check(!SwitchRecovery.CanDismiss(pending,"target"),"crash after applying cannot be dismissed using an outdated accountApplied flag");
+Check(!SwitchRecovery.CanDismiss(pending,"third"),"external account change prevents dismissal");
+pending.Chats[0].ResumeState=ChatResumeState.Unconfirmed;
+Check(!SwitchRecovery.CanDismiss(pending,"source"),"uncertain sent continuation is retained");
+if(OperatingSystem.IsWindows()) {
+ using var self=System.Diagnostics.Process.GetCurrentProcess();
+ Check(string.Equals(WindowsProcessImage.Read(self),Environment.ProcessPath,StringComparison.OrdinalIgnoreCase),"limited-rights process path matches live executable");
+ if(args.Length==1)Check(RuntimeLocator.IsDesktopRunning(args[0]),"runtime locator inspects actual running desktop without module enumeration");
+ Check(RuntimeLocator.IsDesktopRunning(Environment.ProcessPath!),"process detection finds exact executable");
+ Check(!RuntimeLocator.IsDesktopRunning(System.IO.Path.Combine(System.IO.Path.GetTempPath(),System.IO.Path.GetFileName(Environment.ProcessPath!))),"same process name at another path is not the target");
+}
+var recoveryDir=Path.Combine(Path.GetTempPath(),"account-monitor-recovery-"+Guid.NewGuid().ToString("N"));
+try {
+ var vault=new AccountVault(recoveryDir);vault.Upsert(auth);vault.Save();
+ var abandoned=new RuntimeHome(recoveryDir,auth);
+ await File.WriteAllTextAsync(Path.Combine(abandoned.Path,"auth.json"),rotated);
+ await File.WriteAllTextAsync(Path.Combine(abandoned.Path,"owner.json"),JsonSerializer.Serialize(new{pid=int.MaxValue,startedAt=1L,sourceAuthHash=RuntimeHome.Hash(auth)}));
+ await abandoned.DisposeAsync();
+ Check(Directory.Exists(abandoned.Path),"uncommitted credential survives runtime disposal");
+ RuntimeHome.RecoverStale(vault,auth);
+ Check(vault.Data.Accounts.Single().AuthJson==auth,"orphan never overwrites the desktop-owned active session");
+ RuntimeHome.RecoverStale(vault,null);
+ Check(new AccountVault(recoveryDir).Data.Accounts.Single().AuthJson==rotated,"rotated orphan is durably recovered into the encrypted vault");
+ RuntimeHome.CleanupStale(recoveryDir);
+ Check(!Directory.Exists(abandoned.Path),"recovered orphan is cleaned only after persistence");
+} finally { if(Directory.Exists(recoveryDir))Directory.Delete(recoveryDir,true); }
 Console.WriteLine("Credential regression suite completed.");
 sealed class FixtureHandler(HttpStatusCode status,string response):HttpMessageHandler{
  public int Requests;public HttpMethod? Method;public string? Url,Access,Account;public bool SeenRefresh;

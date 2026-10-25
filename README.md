@@ -1,4 +1,4 @@
-# Přehled účtů Codex 0.2.9
+# Přehled účtů Codex 0.2.10
 
 Místní přehled limitů čtyř účtů, kruhový odpočet do očekávané obnovy, údaje o platnosti předplatného a volitelné automatické přepínání. Nezávislý komunitní projekt pro Windows.
 
@@ -46,3 +46,10 @@ Jediný pomocník smí vlastnit jeden profil Codexu. Před spuštěním zastavte
 Only one helper may own a Codex profile. Stop older installations that do not support the ownership lock before starting this version. A completed preferred chat no longer blocks the only ongoing chat; multiple ongoing chats block switching. Failed writes no longer poison subsequent saves, and helper failure invalidates readiness. Codex owns active-session renewal; active usage checks use only its access token. Inactive accounts use isolated checks with bounded recovery after HTTP 401.
 
 Source packages contain no credentials or runtime data. Build the helper before installation. Existing installations are not overwritten by Install.ps1; stop the old monitor and preserve its data before a deliberate upgrade. Long-term renewal and switching at real quota exhaustion remain unverified.
+## Oprava 0.2.10 / Fix 0.2.10
+
+Opraveno zjišťování běžícího Codexu ve Windows bez čtení modulů procesu, návrat aplikace při neúspěšném přechodu a ověřování pokračování při krátce chybějícím stavovém snímku. Kontroly limitů zbytečně neobnovují tokeny neaktivních účtů. Nové přihlašovací údaje se bezpečně ukládají a po pádu lze obnovit nedokončené uložení pouze při shodě identity a původní verze. Aktivní relaci spravuje Codex. Zdravé připojení má volitelné opětovné přihlášení pod Správa přihlášení; vyčerpaný limit není odhlášení.
+
+Windows process inspection no longer enumerates process modules. Failed transitions can reopen the desktop without resending continuation. Verification tolerates a bounded missing-snapshot interval while rejecting a different or failed turn. Routine usage reads avoid unnecessary token refresh; rotated credentials are persisted with identity and revision guards. Healthy accounts keep optional sign-in under account management; exhausted usage is distinct from invalid authentication.
+
+Ruční i řízený automatický přechod byly živě ověřeny na místní instalaci. Automatický test použil simulovaný signál vyčerpání a skutečné přepnutí. Dlouhodobá stabilita přihlášení a přepnutí při skutečném vyčerpání nejsou dosud prokázané. / Manual and controlled automatic handoffs were verified on the local installation. Automatic triggering used synthetic exhaustion with a real handoff. Long-term session stability and natural-exhaustion switching remain unverified.

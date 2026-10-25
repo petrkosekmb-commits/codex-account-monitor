@@ -11,4 +11,10 @@
       <Compile Include="$(MSBuildThisFileDirectory)AccountService.cs;$(MSBuildThisFileDirectory)SessionCredentialPolicy.cs;$(MSBuildThisFileDirectory)ActiveUsageClient.cs;$(MSBuildThisFileDirectory)InactiveUsageReader.cs;$(MSBuildThisFileDirectory)Runtime.cs" />
     </ItemGroup>
   </Target>
+  <Target Name="UseLocalWindowsProcessInspection" BeforeTargets="CoreCompile" Condition="'$(MSBuildProjectName)' == 'CodexSwitch.DesktopClient'">
+    <ItemGroup>
+      <Compile Remove="RuntimeLocator.cs;$(MSBuildProjectDirectory)/RuntimeLocator.cs" />
+      <Compile Include="$(MSBuildThisFileDirectory)RuntimeLocator.cs;$(MSBuildThisFileDirectory)WindowsProcessImage.cs" />
+    </ItemGroup>
+  </Target>
 </Project>

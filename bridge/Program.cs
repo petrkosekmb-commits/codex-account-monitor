@@ -35,7 +35,7 @@ internal static class Program
         }
         catch(OperationCanceledException) when(MonitorStop.IsCancellationRequested) { }
     }
-    private static string FailureCode(Exception e) => e.GetType().Name+"/"+new StackTrace(e,false).GetFrames()?.Select(f=>f.GetMethod()?.Name).FirstOrDefault(n=>n is not null && n!="MoveNext");
+    private static string FailureCode(Exception e) => e.GetType().Name+"/"+string.Join(" > ",new StackTrace(e,false).GetFrames()?.Select(f=>f.GetMethod()).Where(m=>m!=null).Take(8).Select(m=>m!.DeclaringType?.Name+"."+m.Name)??Array.Empty<string>());
     private static string[] Allowed = Array.Empty<string>();
     private static void Send(object message) { lock (OutputLock) Console.WriteLine(JsonSerializer.Serialize(message, Json)); }
     private static bool AllowedEmail(string email) => Allowed.Contains(email, StringComparer.OrdinalIgnoreCase);
@@ -44,7 +44,7 @@ internal static class Program
     {
         var accounts=Service.Accounts.Where(a=>AllowedEmail(a.Email)).Select(a=>new {
             email=a.Email, plan=a.Plan, current=a.IsCurrent, error=AccountErrors.Describe(a.Error),
-            requiresReauthentication=a.Error==SessionCredentialPolicy.Reauthenticate||a.Error=="session_account_unavailable",
+            requiresReauthentication=a.Error==SessionCredentialPolicy.Reauthenticate,
             diagnostic=a.Error!=null&&SessionCredentialPolicy.Diagnostics.TryGetValue(a.Key,out var diagnostic)?diagnostic:null,
             subscription=new { activeUntil=a.SubscriptionActiveUntil?.ToUnixTimeMilliseconds(), checkedAt=a.SubscriptionLastChecked?.ToUnixTimeMilliseconds() },
             checkedAt=a.Usage?.CheckedAt.ToUnixTimeMilliseconds(),
@@ -106,7 +106,7 @@ internal static class Program
                 var pending=Vault.Data.PendingSwitch;
                 if(pending!=null)
                 {
-                    if(pending.AccountApplied||pending.Chats.Any(c=>c.ResumeState is ChatResumeState.Sending or ChatResumeState.Unconfirmed))throw new InvalidOperationException();
+                    if(!SwitchRecovery.CanDismiss(pending,await Service.CurrentAccountKeyAsync(ct)))throw new SwitchPreconditionException("Přechod už mohl změnit účet nebo odeslat pokračování. Jeho stav je nutné nejprve ověřit.");
                     lock(Vault.SyncRoot){Vault.Data.PendingSwitch=null;Vault.Save();}
                 }
                 await Service.SynchronizeCurrentAsync(ct);
@@ -124,9 +124,11 @@ internal static class Program
             {
                 var email=msg.GetProperty("email").GetString()!;if(!AllowedEmail(email))throw new InvalidOperationException();
                 var target=Service.Accounts.Single(a=>string.Equals(a.Email,email,StringComparison.OrdinalIgnoreCase));
-                if(method=="switch"&&Vault.Data.PendingSwitch!=null)throw new InvalidOperationException();
+                if(method=="switch"&&Vault.Data.PendingSwitch!=null)throw new SwitchPreconditionException("Nejdřív vyřeš předchozí nedokončený přechod.");
                 if(method=="switch"&&target.IsCurrent)throw new InvalidOperationException();
                 var threadId=msg.TryGetProperty("threadId",out var tid)&&tid.ValueKind==JsonValueKind.String?tid.GetString():null;
+                if(method=="resume")threadId=Vault.Data.PendingSwitch?.Chats.SingleOrDefault()?.Id;
+                await Service.CheckCredentialBackendAsync(target,ct);
                 Sessions.RestartDiscovery();await Sessions.WaitForDiscoveryAsync(ct);
                 if(Sessions.Threads.Any(t=>t.Waiting))throw new PendingApprovalException();
                 await Service.RefreshAccountAsync(target.Key,ct);
@@ -138,7 +140,24 @@ internal static class Program
                     e=>e is DesktopCloseException?e.Message:e is TimeoutException?"Codex včas nepotvrdil zavření nebo otevření chatu. Zkontroluj jeho stav.":"Operace přepnutí selhala; případný neověřený požadavek na pokračování neopakuj naslepo.");
                 var plan=method=="resume"?Vault.Data.PendingSwitch:await coordinator.PrepareAsync(target.Key,DateTimeOffset.UtcNow,ct);
                 if(plan==null||plan.TargetAccountKey!=target.Key)throw new InvalidOperationException();
-                if(!await coordinator.RunAsync(plan,ct))throw new IncompleteSwitchException();
+                try
+                {
+                    if(!await coordinator.RunAsync(plan,ct))throw new IncompleteSwitchException();
+                }
+                catch
+                {
+                    // Reopen after a failed transition; never resend continuation here.
+                    if(OperatingSystem.IsWindows())
+                    {
+                        try
+                        {
+                            if(!RuntimeLocator.IsDesktopRunning(Service.Installation.DesktopPath))
+                                Process.Start(DesktopLaunch.Create(Service.Installation.DesktopPath,plan.Chats.FirstOrDefault()?.Id))?.Dispose();
+                        }
+                        catch { /* Retain the original diagnostic and saved checkpoint. */ }
+                    }
+                    throw;
+                }
                 await Service.SynchronizeCurrentAsync(ct);
             }
             else throw new InvalidOperationException();
@@ -147,6 +166,7 @@ internal static class Program
         catch(Exception e)
         {
             var message=e switch {
+                SwitchPreconditionException condition=>condition.Message,
                 WrongAccountException wrong=>$"Přihlášení vrátilo účet {wrong.ActualEmail}; tato karta očekává {wrong.ExpectedEmail}. Zkontroluj přesnou adresu účtu.",
                 PendingApprovalException=>"Codex hlásí čekání na schválení nebo odpověď uživatele. Nejdřív dokonči čekající požadavek v Codexu.",
                 IncompleteSwitchException=>"Účet nebo pokračování nejsou plně ověřené. Zkontroluj stav a případně obnov připravený přechod.",
@@ -162,6 +182,7 @@ internal static class Program
         public string ActualEmail {get;}=string.IsNullOrWhiteSpace(actualEmail)?"bez e-mailové adresy":actualEmail;
         public string ExpectedEmail {get;}=expectedEmail;
     }
+    private sealed class SwitchPreconditionException(string message):Exception(message){}
     private sealed class PendingApprovalException:Exception{}
     private sealed class IncompleteSwitchException:Exception{}
 }
@@ -175,7 +196,8 @@ internal sealed class PreservingBackend:IAccountSwitchBackend
     public Task<string?> CurrentAccountAsync(CancellationToken c)=>Backend.CurrentAccountAsync(c);
     public async Task<SwitchChat[]> CaptureAsync(CancellationToken c)
     {
-        var chats=(await Backend.CaptureAsync(c)).ToList();
+        await Sessions.WaitForDiscoveryAsync(c);
+        var chats=OperatingSystem.IsWindows() ? Sessions.Threads.Where(t=>t.Status=="active").Select(t=>new SwitchChat{Id=t.Id,OriginalTitle=t.Title??"",OriginalTurnId=t.LastTurnId,OriginalGoal=t.Goal}).ToList() : (await Backend.CaptureAsync(c)).ToList();
         if(chats.Any(t=>Selected==null||t.Id!=Selected))
             throw new InvalidOperationException("Přepnutí by zasáhlo jiný rozpracovaný chat. Nejdřív jej dokonči.");
         if(Selected!=null)
@@ -190,11 +212,10 @@ internal sealed class PreservingBackend:IAccountSwitchBackend
     }
     public async Task BackupNameAsync(SwitchChat chat,DateTimeOffset at,CancellationToken c)
     {
-        Metadata??=new CodexRpc(Service.Installation.CliPath,Service.CodexHome,true);
-        if(Metadata.Initialization==null)await Metadata.InitializeAsync(c);
-        var r=await Metadata.RequestAsync("thread/read",new{threadId=chat.Id,includeTurns=false},c);
-        var title=ChatTitle.Resolve(JsonValue.String(r.GetProperty("thread"),"name"),chat.OriginalTitle);
-        // The encrypted handoff keeps the original name. No date prefix or user-visible rename.
+        // The desktop snapshot already owns this title. Do not start a second
+        // app-server against the live canonical authentication store for metadata.
+        await Task.CompletedTask;
+        var title=ChatTitle.Resolve(null,chat.OriginalTitle);
         chat.OriginalTitle=title;chat.BackupTitle=title;
     }
     public async Task CloseDesktopAsync(CancellationToken c){if(Metadata!=null){await Metadata.DisposeAsync();Metadata=null;}if(OperatingSystem.IsWindows()){await DesktopClose.CloseAsync(Service.Installation.DesktopPath,c);Sessions.RestartDiscovery();}else await Backend.CloseDesktopAsync(c);}

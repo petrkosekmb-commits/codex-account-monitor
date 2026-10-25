@@ -61,5 +61,8 @@
   "tests/state-writer.test.mjs",
   "tests/switch-flow.test.mjs",
   "tests/switcher.test.mjs",
-  "THIRD_PARTY_NOTICES.md"
+  "THIRD_PARTY_NOTICES.md",
+  "bridge/SwitchRecovery.cs",
+  "bridge/compat/RuntimeLocator.cs",
+  "bridge/compat/WindowsProcessImage.cs"
 ]
