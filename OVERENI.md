@@ -1,3 +1,18 @@
+# Ověření 0.2.12 / Verification
+
+Veřejný balíček 0.2.12: všech 73 testů Node prošlo, včetně kontroly distribučního seznamu, příkladových adres a vzorů tajných údajů. Sestavení pomocníka, 24 protokolových kontrol i regrese obnovy a ukládání přihlášení prošly. Izolované testy obsahují nový modul historie; test hostitele čeká na zveřejnění výsledku ukončení procesu, nikoli pouze na vznik druhého procesu.
+
+Public package 0.2.12: all 73 Node tests passed, including distribution, example-identity and secret-pattern checks. Helper build, 24 protocol checks and credential recovery/persistence regressions passed. Isolated fixtures include the new health module; the host test waits for the published exit result instead of racing the second process startup.
+
+26. října 2026: místní verze 0.2.12 byla nasazena s ověřením 217 kontrolních součtů. Restart zachoval přihlášení všech čtyř účtů, aktivní identitu i historii. Předchozí sledování verze 0.2.11 pokrylo téměř deset hodin a přes 1 290 úspěšných kontrol na každý účet. Tři účty neměly zaznamenanou chybu; jeden měl přechodný výpadek, po kterém následovalo úspěšné ověření za přibližně 30 sekund. V historii nebyl zaznamenán požadavek na nové přihlášení.
+
+Na verzi 0.2.11 bylo před nasazením poslední opravy pozorováno skutečné dokončené přepnutí s pokračováním chatu. Verze 0.2.12 navíc opravuje předčasné odmítnutí chybějícího prvního snímku. Nové regrese ověřují chybějící snímek, přechod přes starý tah a omezený počet čtení bez druhého odeslání. Nový živý přechod na verzi 0.2.12 nebyl vyvoláván. Skutečná expirace tokenu, týdenní stabilita a všechny podmínky bezobslužného provozu zůstávají neověřené.
+
+On 26 October 2026, local version 0.2.12 was deployed with 217 file hashes verified. Restart preserved all four sign-ins, the active identity and health history. Earlier observation on 0.2.11 covered nearly ten hours and over 1,290 successful checks per account. Three accounts had no recorded errors; one recovered from a transient failure within approximately 30 seconds. No reauthentication transition was recorded.
+
+A completed live handoff with chat continuation was observed on 0.2.11 before this final patch. Version 0.2.12 additionally tolerates a missing first snapshot with bounded reads and no duplicate continuation. A new live handoff was not induced on 0.2.12. Actual token expiration, week-long stability and every unattended scenario remain unverified. No personal identities or production logs are included in this distribution.
+
+---
 # Ověření 0.2.10 / Verification
 
 Dne 25. října 2026 místní opravená instalace úspěšně dokončila skutečný ruční přechod a řízený automatický přechod mezi dvěma účty. Ověřena cílová identita, opětovné otevření desktopu, stejný chat, nový běžící tah, právě jeden požadavek a odstranění nedokončeného přechodu. Kontrola pokračování sledovala běh přibližně 90 sekund. Automatický test použil pouze syntetický signál vyčerpání v paměti, nikoli změnu skutečných limitů.

@@ -58,3 +58,32 @@ test('actual changed turn remains rejected',async()=>{
  let calls=0;const state={};const result=await runSwitch({state,id:4,threadId:'chat',save:async()=>{},wait:async()=>{},apply:()=>{},request:async()=>({threads:[{id:'chat',lastTurnId:++calls===1?'new':'other',lastTurnStatus:'inProgress',status:'active'}]})});
  assert.equal(result.ok,false);assert.match(state.lastSwitch.error,/se změnil/);
 });
+
+for(const beforeTurnId of [undefined,'old']){
+ test(`missing initial snapshot recovers with baseline ${beforeTurnId??'unknown'}`,async()=>{
+  const calls=[],state={};
+  const result=await runSwitch({state,id:2,threadId:'chat',beforeTurnId,save:async()=>{},wait:async()=>{},apply:()=>{},request:async method=>{
+   calls.push(method);
+   return {threads:calls.length===1?[]:[{id:'chat',lastTurnId:'new',lastTurnStatus:'completed',status:'idle'}]};
+  }});
+  assert.equal(result.ok,true);assert.deepEqual(calls,['switch','status']);
+ });
+}
+
+test('initial snapshot gap followed by the old turn still waits for a new turn',async()=>{
+ const calls=[],state={};
+ const result=await runSwitch({state,id:2,threadId:'chat',beforeTurnId:'old',save:async()=>{},wait:async()=>{},apply:()=>{},request:async method=>{
+  calls.push(method);const n=calls.length;
+  return {threads:n===1||n===3?[]:[{id:'chat',lastTurnId:n<4?'old':'new',lastTurnStatus:'completed',status:'idle'}]};
+ }});
+ assert.equal(result.ok,true);assert.deepEqual(calls,['switch','status','status','status']);
+});
+
+test('permanently missing first snapshot is bounded and never resends',async()=>{
+ const calls=[],state={};
+ const result=await runSwitch({state,id:2,threadId:'chat',beforeTurnId:'old',save:async()=>{},wait:async()=>{},apply:()=>{},request:async method=>{
+  calls.push(method);return {threads:[]};
+ }});
+ assert.equal(result.ok,false);assert.match(state.lastSwitch.error,/není doložené/);
+ assert.equal(calls.filter(method=>method==='switch').length,1);assert.equal(calls.length,8);
+});

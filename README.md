@@ -1,4 +1,14 @@
-# Přehled účtů Codex 0.2.10
+# Přehled účtů Codex 0.2.12
+
+## Stabilita 0.2.12 / Stability
+
+Obnova neaktivního přihlášení má trvalé omezení opakovaných pokusů. Odmítnutý obnovovací token se znovu nepoužije jen kvůli změně přístupových metadat. Neuložené přihlášení se zachová při chybě zápisu nebo pádu; úklid je odstraní až po potvrzeném uložení. Kontrola limitů nekoliduje s probíhajícím přihlášením a zrušená operace neobnoví starou chybovou hlášku. Přehled ukazuje historii stability bez ukládání tokenů do této historie. Ověření pokračování krátce počká i na chybějící první snímek chatu, bez opakovaného odeslání zprávy.
+
+Inactive-session renewal now persists retry backoff and rejection guards. Changing access metadata cannot unblock the same rejected refresh token. Uncommitted credentials survive write failures or crashes and are cleaned up only after persistence is acknowledged. Usage checks do not overlap login operations, and cancelled login cannot restore an obsolete error. The dashboard records bounded, token-free connection health. Continuation verification also waits for a missing initial snapshot without resending a message.
+
+Verze 0.2.12 je nasazená a regresně ověřená. Přibližně deset hodin předchozího sledování oprav přihlášení není zárukou dlouhodobého provozu ani ověřením všech případů expirace. Přesný rozsah ověření je v [OVERENI.md](OVERENI.md).
+
+Version 0.2.12 is deployed and regression-tested. Approximately ten hours of earlier session-hardening observation is not a long-term guarantee or proof of every expiration scenario. See [verification scope](OVERENI.md).
 
 Místní přehled limitů čtyř účtů, kruhový odpočet do očekávané obnovy, údaje o platnosti předplatného a volitelné automatické přepínání. Nezávislý komunitní projekt pro Windows.
 

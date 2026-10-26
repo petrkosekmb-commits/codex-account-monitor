@@ -79,11 +79,42 @@ try {
  Check(Directory.Exists(abandoned.Path),"uncommitted credential survives runtime disposal");
  RuntimeHome.RecoverStale(vault,auth);
  Check(vault.Data.Accounts.Single().AuthJson==auth,"orphan never overwrites the desktop-owned active session");
+ RuntimeHome.CleanupStale(recoveryDir);
+ Check(Directory.Exists(abandoned.Path),"cleanup preserves an uncommitted rotation skipped for the active account");
  RuntimeHome.RecoverStale(vault,null);
  Check(new AccountVault(recoveryDir).Data.Accounts.Single().AuthJson==rotated,"rotated orphan is durably recovered into the encrypted vault");
  RuntimeHome.CleanupStale(recoveryDir);
  Check(!Directory.Exists(abandoned.Path),"recovered orphan is cleaned only after persistence");
 } finally { if(Directory.Exists(recoveryDir))Directory.Delete(recoveryDir,true); }
+var guardDir=Path.Combine(Path.GetTempPath(),"refresh-guard-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(guardDir);
+try {
+ var guard=new RefreshGuard(guardDir);guard.Begin("private-account",auth,1000);
+ try{new RefreshGuard(guardDir).Begin("private-account",auth,1001);throw new Exception("restart bypassed guard");}catch(SessionCredentialException e){Check(e.Code=="session_refresh_backoff","pending refresh is throttled across process restarts");}
+ guard.Failed("private-account",auth,true,2000);
+ try{new RefreshGuard(guardDir).Begin("private-account",auth.Replace("synthetic-access","another-access"),9000000);throw new Exception("access change bypassed terminal guard");}catch(SessionCredentialException e){Check(e.Code==SessionCredentialPolicy.Reauthenticate,"same rejected refresh token stays blocked when access metadata changes");}
+ try{new RefreshGuard(guardDir).Begin("private-account",auth,9000000);throw new Exception("terminal grant reused");}catch(SessionCredentialException e){Check(e.Code==SessionCredentialPolicy.Reauthenticate,"confirmed rejected credential is not repeatedly refreshed");}
+ guard.Begin("private-account",rotated,3000);guard.Failed("private-account",rotated,false,4000);
+ try{new RefreshGuard(guardDir).Begin("private-account",rotated,4001);throw new Exception("transient retry storm");}catch(SessionCredentialException e){Check(e.Code=="session_refresh_backoff","transient failure uses persisted retry delay");}
+ new RefreshGuard(guardDir).Begin("private-account",rotated,200000);
+ guard.Succeeded("private-account",200001);new RefreshGuard(guardDir).Begin("private-account",rotated,200002);
+ var raw=File.ReadAllText(Path.Combine(guardDir,"refresh-health.json"));Check(!raw.Contains("synthetic-")&&!raw.Contains("private-account")&&!raw.Contains("example.com"),"refresh ledger stores no credentials or personal identities");
+ Check(!AccountErrors.Describe("session_refresh_backoff")!.Contains("znovu přihl"),"backoff does not ask for new login");
+} finally {Directory.Delete(guardDir,true);}
+var failureDir=Path.Combine(Path.GetTempPath(),"refresh-persistence-"+Guid.NewGuid().ToString("N"));
+try {
+ var vault=new AccountVault(failureDir);vault.Upsert(auth);vault.Save();
+ var abandoned=new RuntimeHome(failureDir,auth);
+ await File.WriteAllTextAsync(Path.Combine(abandoned.Path,"auth.json"),rotated);
+ await File.WriteAllTextAsync(Path.Combine(abandoned.Path,"owner.json"),JsonSerializer.Serialize(new{pid=int.MaxValue,startedAt=1L,sourceAuthHash=RuntimeHome.Hash(auth)}));
+ File.Move(vault.FilePath,vault.FilePath+".original");Directory.CreateDirectory(vault.FilePath);
+ try{RuntimeHome.RecoverStale(vault,null);throw new Exception("save failure was hidden");}catch(Exception e) when(e is IOException or UnauthorizedAccessException){Check(!File.Exists(Path.Combine(abandoned.Path,"credentials.saved")),"failed vault write never marks a credential committed");}
+ RuntimeHome.CleanupStale(failureDir);Check(File.Exists(Path.Combine(abandoned.Path,"auth.json")),"failed vault write retains recoverable rotation during cleanup");
+ Directory.Delete(vault.FilePath);File.Move(vault.FilePath+".original",vault.FilePath);
+ RuntimeHome.RecoverStale(new AccountVault(failureDir),null);Check(new AccountVault(failureDir).Data.Accounts.Single().AuthJson==rotated,"restart recovers rotation after storage failure is resolved");
+ var loginHome=new RuntimeHome(failureDir,null);await File.WriteAllTextAsync(Path.Combine(loginHome.Path,"auth.json"),auth);await loginHome.DisposeAsync();
+ Check(File.Exists(Path.Combine(loginHome.Path,"auth.json")),"new login survives disposal until vault persistence is acknowledged");
+ loginHome.CredentialsSaved();await loginHome.DisposeAsync();Check(!Directory.Exists(loginHome.Path),"committed new login cleans up normally");
+} finally {if(Directory.Exists(failureDir))Directory.Delete(failureDir,true);}
 Console.WriteLine("Credential regression suite completed.");
 sealed class FixtureHandler(HttpStatusCode status,string response):HttpMessageHandler{
  public int Requests;public HttpMethod? Method;public string? Url,Access,Account;public bool SeenRefresh;

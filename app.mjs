@@ -11,6 +11,7 @@ import {Rpc} from './rpc.mjs';
 import {Switcher,bridgeInstalled} from './switcher.mjs';
 import {runSwitch} from './switch-flow.mjs';
 import {automaticSwitch} from './automatic-switch.mjs';
+import {observeAccountHealth} from './account-health.mjs';
 import {readAccountConfig} from './config.mjs';
 const ROOT=dirname(fileURLToPath(import.meta.url));
 const DATA=process.env.ACCOUNT_MONITOR_DATA||join(process.env.LOCALAPPDATA||process.env.USERPROFILE,'CodexAccountMonitor');
@@ -56,7 +57,7 @@ function profileHome(id){const email=state.slots.find(s=>s.id===id).email.toLowe
 async function query(rpc){const {account}=await rpc.request('account/read',{refreshToken:false});if(account?.type!=='chatgpt'||!account.email)throw new Error('Chybí přihlášení účtu ChatGPT.');const raw=await rpc.request('account/rateLimits/read');return {account,raw};}
 async function withRpc(home,fn){const rpc=new Rpc(home);live.add(rpc);try{await rpc.start();return await fn(rpc);}finally{live.delete(rpc);rpc.close();}}
 async function refresh(){
-  if(busy)return;busy=true;state.refreshing=true;
+  if(busy||login?.bridge||login?.rpc)return;busy=true;state.refreshing=true;
   try{
     if(switcher){
       try{switcherView=await switcher.request('refresh');applySwitcherView();switcherError=null;}
@@ -80,6 +81,7 @@ function applySwitcherView(){
   state.activeEmail=switcherView?.accounts.find(a=>a.current)?.email??null;
   for(const slot of state.slots){
     const account=switcherView?.accounts.find(a=>sameEmail(a.email,slot.email));
+    observeAccountHealth(slot,account);
     slot.connected=!!account;
     slot.requiresReauthentication=account?.requiresReauthentication===true;
     slot.credentialDiagnostic=account?.diagnostic??null;
@@ -93,9 +95,9 @@ async function beginLogin(id){
   if(login||busy)throw new Error('Probíhá jiná kontrola nebo přihlášení.');
   const slot=state.slots.find(s=>s.id===id);if(!slot)throw new Error('Neplatný účet.');
   if(switcher){
-    login={id,status:'starting',startedAt:Date.now(),bridge:true};
-    try{switcherView=await switcher.request('login',{email:slot.email},16*60*1000);applySwitcherView();await save();login={id,status:'done',message:'Účet je připojený pro přepínání i průběžnou kontrolu.'};}
-    catch(e){login={id,status:'error',message:e.message};}
+    const operation=login={id,status:'starting',startedAt:Date.now(),bridge:true};
+    try{switcherView=await switcher.request('login',{email:slot.email},16*60*1000);applySwitcherView();await save();if(login===operation)login={id,status:'done',message:'Účet je připojený pro přepínání i průběžnou kontrolu.'};}
+    catch(e){if(login===operation)login={id,status:'error',message:e.message};}
     return;
   }
   const rpc=new Rpc(profileHome(id));live.add(rpc);

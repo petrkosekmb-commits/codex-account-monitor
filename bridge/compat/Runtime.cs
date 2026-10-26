@@ -11,10 +11,15 @@ internal sealed class RuntimeHome : IAsyncDisposable
     public string Path { get; }
     private readonly string _root;
     private bool _preserve;
-    internal void CredentialsSaved() => _preserve=false;
+    internal void CredentialsSaved()
+    {
+        MarkSaved(Path);
+        _preserve=false;
+    }
+    private static void MarkSaved(string path) => SecureFiles.AtomicWriteText(System.IO.Path.Combine(path,"credentials.saved"),"committed");
     public RuntimeHome(string dataDirectory, string? authJson)
     {
-        _preserve=authJson!=null;
+        _preserve=true;
         _root = System.IO.Path.Combine(dataDirectory, "runtime");
         Directory.CreateDirectory(_root);
         Path = System.IO.Path.Combine(_root, Guid.NewGuid().ToString("N"));
@@ -30,7 +35,7 @@ internal sealed class RuntimeHome : IAsyncDisposable
     }
     public async ValueTask DisposeAsync()
     {
-        if(_preserve)return; // Keep an uncommitted rotation available for startup recovery.
+        if(_preserve&&File.Exists(System.IO.Path.Combine(Path,"auth.json")))return;
         // Windows may release the child process file handles shortly after exit.
         // Preserve the account query/refresh result instead of replacing it with
         // an unrelated temporary-directory cleanup exception.
@@ -69,7 +74,7 @@ internal sealed class RuntimeHome : IAsyncDisposable
                 if(profile==null||SessionCredentialPolicy.IsDesktopOwned(profile.Key,profile.RequiresApply,canonical))continue;
                 // Recover only a child of the exact credential revision still in the vault.
                 // Never replace a newer login or the active desktop's session with an orphan.
-                if(CanRecover(hash,profile.AuthJson,candidate)) { vault.Upsert(candidate); vault.Save(); }
+                if(CanRecover(hash,profile.AuthJson,candidate)) { vault.Upsert(candidate); vault.Save(); MarkSaved(directory); }
             }
         }
     }
@@ -89,7 +94,10 @@ internal sealed class RuntimeHome : IAsyncDisposable
             var alive = false;
             try { using var process = Process.GetProcessById(pid.Value); alive = process.StartTime.ToUniversalTime().Ticks == startTicks; }
             catch (ArgumentException) { }
-            if (!alive) SecureFiles.DeleteOwnedRuntime(root, path);
+            // Recovery may deliberately skip an active or newer credential. Do not
+            // erase that uncommitted evidence merely because its old owner exited.
+            if (!alive && (!File.Exists(System.IO.Path.Combine(path,"auth.json")) || File.Exists(System.IO.Path.Combine(path,"credentials.saved"))))
+                SecureFiles.DeleteOwnedRuntime(root, path);
         }
     }
 }

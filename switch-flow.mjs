@@ -1,13 +1,14 @@
 // Keep account reconciliation identical after success and partial failure.
 export async function verifyContinuation({view,threadId,request,apply,wait=ms=>new Promise(r=>setTimeout(r,ms)),samples=18,beforeTurnId}){
-  if(beforeTurnId){
-    for(let i=0;i<6&&view.threads?.find(t=>t.id===threadId)?.lastTurnId===beforeTurnId;i++){
-      await wait(1000);view=await request('status');apply(view);
-    }
-    if(view.threads?.find(t=>t.id===threadId)?.lastTurnId===beforeTurnId)
-      throw new Error('Účet se změnil, ale nový tah pokračování není potvrzený. Další zpráva nebyla odeslána.');
+  // The first result can also arrive while history is invalidated. Wait for
+  // evidence of a new turn, including across missing -> old -> new snapshots.
+  let initial=view.threads?.find(t=>t.id===threadId);
+  for(let retry=0;retry<6&&(!initial?.lastTurnId||(beforeTurnId&&initial.lastTurnId===beforeTurnId));retry++){
+    await wait(1000);view=await request('status');apply(view);
+    initial=view.threads?.find(t=>t.id===threadId);
   }
-  const initial=view.threads?.find(t=>t.id===threadId);
+  if(beforeTurnId&&initial?.lastTurnId===beforeTurnId)
+    throw new Error('Účet se změnil, ale nový tah pokračování není potvrzený. Další zpráva nebyla odeslána.');
   if(!initial?.lastTurnId)throw new Error('Účet se změnil, ale pokračování vybraného chatu není doložené. Ověř chat ručně.');
   const turnId=initial.lastTurnId;
   for(let i=0;i<=samples;i++){

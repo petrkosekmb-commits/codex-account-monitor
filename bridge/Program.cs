@@ -45,6 +45,7 @@ internal static class Program
         var accounts=Service.Accounts.Where(a=>AllowedEmail(a.Email)).Select(a=>new {
             email=a.Email, plan=a.Plan, current=a.IsCurrent, error=AccountErrors.Describe(a.Error),
             requiresReauthentication=a.Error==SessionCredentialPolicy.Reauthenticate,
+            refreshHealth=Service.RefreshHealth.Status(a.Key),
             diagnostic=a.Error!=null&&SessionCredentialPolicy.Diagnostics.TryGetValue(a.Key,out var diagnostic)?diagnostic:null,
             subscription=new { activeUntil=a.SubscriptionActiveUntil?.ToUnixTimeMilliseconds(), checkedAt=a.SubscriptionLastChecked?.ToUnixTimeMilliseconds() },
             checkedAt=a.Usage?.CheckedAt.ToUnixTimeMilliseconds(),

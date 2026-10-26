@@ -15,6 +15,7 @@ internal sealed record AccountRegistration(AccountProfile Profile, Task Immediat
 internal sealed class AccountService
 {
     public AccountVault Vault { get; }
+    internal RefreshGuard RefreshHealth { get; }
     public string CodexHome { get; }
     public string AuthPath => Path.Combine(CodexHome, "auth.json");
     public CodexInstallation Installation { get; private set; } = new("", "");
@@ -37,6 +38,7 @@ internal sealed class AccountService
         LinuxClientSelection? linuxClient = null, string? contextDirectory = null)
     {
         Vault = vault; CodexHome = Path.GetFullPath(codexHome);
+        RefreshHealth = new RefreshGuard(vault.DirectoryPath);
         _linuxClient = linuxClient; _contextDirectory = Path.GetFullPath(contextDirectory ?? codexHome);
         if (OperatingSystem.IsLinux() && linuxClient == null) LinuxDesktop = new(CodexHome);
         _queries = new RefreshCoordinator(refreshOperation ?? RefreshCoreAsync);
@@ -136,6 +138,8 @@ internal sealed class AccountService
                 var canonical = CanonicalAuthExists() ? ReadCanonicalAuth() : null;
                 if (canonical != null && !profile.RequiresApply && AuthDocument.Parse(canonical).Key == key) Vault.Upsert(canonical);
                 authJson = profile.AuthJson; revision = profile.CredentialRevision;
+                // A previous failed save must be durable before another network refresh.
+                Vault.Save();
             }
             // The desktop owns refresh-token rotation for the active registration.
             // Its access token is sufficient for a read-only usage request; never
@@ -158,12 +162,14 @@ internal sealed class AccountService
                     profile.Usage = activeUsage; profile.Error = null;
                     UsageHistory.Record(profile, activeUsage); Vault.Save();
                 }
+                RefreshHealth.Succeeded(key,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
                 return;
             }
             catch (SessionCredentialException error) when (error.Code == SessionCredentialPolicy.RefreshPending)
             {
                 if (SessionCredentialPolicy.IsDesktopOwned(key, profile.RequiresApply, CanonicalAuthExists() ? ReadCanonicalAuth() : null)) throw;
             }
+            RefreshHealth.Begin(key,authJson,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
             await using var home = new RuntimeHome(Vault.DirectoryPath, authJson);
             UsageSnapshot? usage = null;
             string? email = null, plan = null;
@@ -176,6 +182,11 @@ internal sealed class AccountService
                     profile.Email).ConfigureAwait(false);
                 usage = UsageSnapshot.Parse(response, profile.AccountId);
                 email = profile.Email; plan = profile.Plan;
+            }
+            catch(Exception error)
+            {
+                RefreshHealth.Failed(key,authJson,error is SessionCredentialException e && e.Code==SessionCredentialPolicy.Reauthenticate,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+                throw;
             }
             finally
             {
@@ -194,9 +205,11 @@ internal sealed class AccountService
                                 if (!profile.RequiresApply && canonical == authJson) SecureFiles.AtomicWriteText(AuthPath, refreshed);
                                 else if (!profile.RequiresApply && canonical != null && AuthDocument.Parse(canonical).Key == key) refreshed = canonical;
                             }
-                            if (profile.AuthJson != refreshed) { Vault.Upsert(refreshed); Vault.Save(); }
+                            if (profile.AuthJson != refreshed) Vault.Upsert(refreshed);
                             revision = profile.CredentialRevision;
                         }
+                        // Even unchanged in-memory credentials may follow a failed save.
+                        Vault.Save();
                     }
                     home.CredentialsSaved();
                 }
@@ -210,6 +223,7 @@ internal sealed class AccountService
                 if (plan != null) profile.Plan = plan;
                 Vault.Save();
             }
+            RefreshHealth.Succeeded(key,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { throw; }
         catch (Exception error)
@@ -275,7 +289,9 @@ internal sealed class AccountService
             }
             var auth = home.ReadAuth();
             if (client != null) await client.RequireFileAsync(cancellation, AuthDocument.Parse(auth).AccountId).ConfigureAwait(false);
-            return CompleteRegistrationCore(auth);
+            var registration=CompleteRegistrationCore(auth);
+            home.CredentialsSaved();
+            return registration;
         }
         finally { _loginGate.Release(); Changed?.Invoke(); }
     }
