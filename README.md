@@ -1,4 +1,14 @@
-# Přehled účtů Codex 0.2.12
+# Přehled účtů Codex 0.2.13
+
+## Potvrzení pokračování 0.2.13 / Continuation receipts
+
+Při ztraceném nebo neúplném potvrzení odeslání monitor až deset sekund dohledává konkrétní zprávu pokračování. Kontroluje shodu zprávy, nový tah a cílový účet. Zprávu znovu neposílá; jiná ruční zpráva ani chybný tah nejsou důkazem úspěchu. První typ chyby potvrzení se uchová odděleně bez přihlašovacích údajů či obsahu chatu. Výslovné zrušení se nevyhodnocuje jako úspěch.
+
+After a lost or incomplete send receipt, the monitor checks for the exact continuation message for up to ten seconds, requiring a new turn and the target account. It never resends the message, and unrelated manual input or failed turns are not success evidence. The first receipt error type is retained separately without credentials or chat content. Explicit cancellation remains cancellation.
+
+Aktualizace sama neuzavírá staré nepotvrzené přechody ani neobnovuje zrušené přihlášení. Oprava je regresně ověřená; úplné živé přepnutí touto verzí dosud není doložené.
+
+Updating does not automatically settle old unconfirmed transitions or restore revoked sign-ins. The repair is regression-tested; a complete live handoff on this version has not yet been established.
 
 ## Stabilita 0.2.12 / Stability
 

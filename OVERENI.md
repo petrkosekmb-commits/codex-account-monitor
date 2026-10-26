@@ -1,3 +1,14 @@
+# Ověření 0.2.13 / Verification
+
+26. října 2026 prošlo všech 73 testů Node veřejné distribuce, sestavení obou variant pomocníka, 24 protokolových kontrol a regrese přihlášení včetně 12 nových kontrol potvrzení. Kontrola distribuovaných souborů prošla bez osobních adres, osobních cest a vzorů tajných údajů. Místní nasazení ověřilo 219 souborů a verzi pomocníka 0.2.13.0. Zachovalo aktuální účet i původní neuzavřený přechod; automatika zůstala vypnutá.
+
+On 26 October 2026, all 73 public-distribution Node tests, both helper builds, 24 protocol checks and credential regressions including 12 new receipt checks passed. Distribution scans found no personal addresses, personal paths or credential patterns. Local deployment verified 219 files and helper version 0.2.13.0, preserving the active account and the unresolved previous transition. Automation remained disabled.
+
+Přibylo 12 kontrol potvrzení pokračování: shoda konkrétní zprávy, odmítnutí ručního či starého tahu, chyby a čekajícího schválení, změna účtu, obnovení potvrzení po ztracené odpovědi bez druhého odeslání, omezený počet čtení, oba podporované formáty odpovědi, interní timeout a výslovné zrušení. Tyto kontroly simulují možné selhání potvrzení; nejsou důkazem přesné prvotní příčiny konkrétního provozního incidentu. Nová verze nezaručuje obnovení zrušených tokenů ani automatické uzavření starých nejasných přechodů.
+
+Twelve continuation checks cover exact message correlation, rejection of unrelated/manual or old turns, failures and approval waits, account changes, lost-reply recovery without a second send, bounded reads, both supported reply shapes, transport timeout and explicit cancellation. These simulate receipt failures; they do not establish the exact original cause of a particular production incident. This version does not guarantee recovery of revoked tokens or automatic settlement of old uncertain transitions. No live handoff on 0.2.13 is claimed.
+
+---
 # Ověření 0.2.12 / Verification
 
 Veřejný balíček 0.2.12: všech 73 testů Node prošlo, včetně kontroly distribučního seznamu, příkladových adres a vzorů tajných údajů. Sestavení pomocníka, 24 protokolových kontrol i regrese obnovy a ukládání přihlášení prošly. Izolované testy obsahují nový modul historie; test hostitele čeká na zveřejnění výsledku ukončení procesu, nikoli pouze na vznik druhého procesu.

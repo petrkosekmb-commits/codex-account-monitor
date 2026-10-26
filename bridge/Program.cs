@@ -258,13 +258,27 @@ internal sealed class PreservingBackend:IAccountSwitchBackend
         }
         if(thread==null)throw new TimeoutException("Codex nepotvrdil otevření chatu.");
         if(thread.Waiting)throw new InvalidOperationException("Chat čeká na schválení nebo odpověď.");
+        if(chat.ResumeState is ChatResumeState.Sending or ChatResumeState.Unconfirmed)
+            return await ContinuationReceipt.ConfirmAsync(chat,
+                ()=>Sessions.Threads.FirstOrDefault(t=>t.Id==chat.Id),
+                async()=>await CurrentAccountAsync(c)==Target,()=>Task.Delay(1000,c));
         if(SwitchContinuation.Decide(chat,thread) is ChatResumeState settled)return settled;
         if(await CurrentAccountAsync(c)!=Target)throw new InvalidOperationException("Aktivní účet se změnil.");
         sending();
-        var result=await Sessions.SendToOwnerAsync(thread,"thread-follower-start-turn",SwitchContinuation.StartParameters(chat),2,c);
-        var turn=result.GetProperty("result").GetProperty("turn");
-        if(string.IsNullOrEmpty(JsonValue.String(turn,"id")))throw new InvalidDataException("Pokračování chatu nebylo potvrzené.");
-        return ChatResumeState.Resumed;
+        return await ContinuationReceipt.SendOnceAsync(chat,
+            ()=>Sessions.SendToOwnerAsync(thread,"thread-follower-start-turn",SwitchContinuation.StartParameters(chat),2,c),
+            ()=>Sessions.Threads.FirstOrDefault(t=>t.Id==chat.Id),
+            async()=>await CurrentAccountAsync(c)==Target,()=>Task.Delay(1000,c),error=>{
+                // Keep the first transport failure across later manual retries.
+                // No server text, credentials, account identity or chat text.
+                try{
+                    var dir=Path.Combine(Service.Vault.DirectoryPath,"continuation-diagnostics");
+                    Directory.CreateDirectory(dir);
+                    var path=Path.Combine(dir,Guid.Parse(chat.ContinueMessageId).ToString("N")+".json");
+                    using var file=new FileStream(path,FileMode.CreateNew,FileAccess.Write,FileShare.Read);
+                    JsonSerializer.Serialize(file,new{at=DateTimeOffset.UtcNow,phase="receipt",errorType=error.GetType().Name});
+                }catch(Exception){ /* Diagnostics must not replace the send outcome. */ }
+            },c);
     }
     public async ValueTask DisposeAsync(){if(Metadata!=null)await Metadata.DisposeAsync();await Backend.DisposeAsync();}
 }

@@ -115,6 +115,36 @@ try {
  Check(File.Exists(Path.Combine(loginHome.Path,"auth.json")),"new login survives disposal until vault persistence is acknowledged");
  loginHome.CredentialsSaved();await loginHome.DisposeAsync();Check(!Directory.Exists(loginHome.Path),"committed new login cleans up normally");
 } finally {if(Directory.Exists(failureDir))Directory.Delete(failureDir,true);}
+var receiptChat=new SwitchChat{Id="chat",OriginalTurnId="old",ContinueMessageId="message",ResumeState=ChatResumeState.Sending};
+var receiptThread=new DesktopThreadState("chat","owner","active",false,null,null,"resumed","new","inProgress","message");
+Check(ContinuationReceipt.Evidence(receiptChat,receiptThread)==ChatResumeState.Resumed,"exact continuation message and new running turn confirm receipt");
+Check(ContinuationReceipt.Evidence(receiptChat,receiptThread with {LastMessageId="manual"})==null,"unrelated manual turn is not proof of automatic continuation");
+Check(ContinuationReceipt.Evidence(receiptChat,receiptThread with {LastTurnId="old"})==null,"old turn never confirms continuation");
+Check(ContinuationReceipt.Evidence(receiptChat,receiptThread with {Status="systemError",LastTurnStatus="failed"})==null,"failed new turn never confirms continuation");
+Check(ContinuationReceipt.Evidence(receiptChat,receiptThread with {Waiting=true})==null,"waiting approval never confirms running continuation");
+int sends=0,reads=0,diagnoses=0;
+var recovered=await ContinuationReceipt.SendOnceAsync(receiptChat,
+ ()=>{sends++;throw new IOException("synthetic transport loss");},
+ ()=>++reads<3?null:receiptThread,()=>Task.FromResult(true),()=>Task.CompletedTask,_=>diagnoses++);
+Check(recovered==ChatResumeState.Resumed&&sends==1&&reads==3&&diagnoses==1,"lost reply recovers from correlated evidence without another send");
+sends=0;reads=0;
+var uncertain=await ContinuationReceipt.SendOnceAsync(receiptChat,
+ ()=>{sends++;throw new IOException("synthetic loss");},()=>{reads++;return receiptThread with {LastMessageId="manual"};},
+ ()=>Task.FromResult(true),()=>Task.CompletedTask,_=>{});
+Check(uncertain==ChatResumeState.Unconfirmed&&sends==1&&reads==11,"uncertain continuation stops after bounded reads and one send");
+Check(await ContinuationReceipt.ConfirmAsync(receiptChat,()=>receiptThread,()=>Task.FromResult(false),()=>Task.CompletedTask)==ChatResumeState.Unconfirmed,"account change blocks receipt recovery");
+foreach(var json in new[]{"{\"turn\":{\"id\":\"new\"}}","{\"result\":{\"turn\":{\"id\":\"new\"}}}"}){
+ using var receipt=JsonDocument.Parse(json);
+ Check(await ContinuationReceipt.SendOnceAsync(receiptChat,()=>Task.FromResult(receipt.RootElement),()=>null,()=>Task.FromResult(true),()=>Task.CompletedTask,_=>throw new Exception("unexpected diagnostic"))==ChatResumeState.Resumed,"supported transport envelope confirms a new turn");
+}
+Check(await ContinuationReceipt.SendOnceAsync(receiptChat,()=>throw new OperationCanceledException(),()=>receiptThread,
+ ()=>Task.FromResult(true),()=>Task.CompletedTask,_=>{})==ChatResumeState.Resumed,"transport timeout can reconcile a correlated receipt");
+using(var cancelled=new CancellationTokenSource()){
+ cancelled.Cancel();var interrupted=false;
+ try{await ContinuationReceipt.SendOnceAsync(receiptChat,()=>throw new OperationCanceledException(),()=>receiptThread,
+  ()=>Task.FromResult(true),()=>Task.CompletedTask,_=>{},cancelled.Token);}catch(OperationCanceledException){interrupted=true;}
+ Check(interrupted,"explicit cancellation is never converted into successful recovery");
+}
 Console.WriteLine("Credential regression suite completed.");
 sealed class FixtureHandler(HttpStatusCode status,string response):HttpMessageHandler{
  public int Requests;public HttpMethod? Method;public string? Url,Access,Account;public bool SeenRefresh;
