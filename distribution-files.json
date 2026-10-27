@@ -68,5 +68,6 @@
   "account-health.mjs",
   "tests/account-health.test.mjs",
   "tests/login-race.test.mjs",
-  "bridge/ContinuationReceipt.cs"
+  "bridge/ContinuationReceipt.cs",
+  "tests/selection.test.mjs"
 ]

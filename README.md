@@ -73,3 +73,9 @@ Opraveno zjišťování běžícího Codexu ve Windows bez čtení modulů proce
 Windows process inspection no longer enumerates process modules. Failed transitions can reopen the desktop without resending continuation. Verification tolerates a bounded missing-snapshot interval while rejecting a different or failed turn. Routine usage reads avoid unnecessary token refresh; rotated credentials are persisted with identity and revision guards. Healthy accounts keep optional sign-in under account management; exhausted usage is distinct from invalid authentication.
 
 Ruční i řízený automatický přechod byly živě ověřeny na místní instalaci. Automatický test použil simulovaný signál vyčerpání a skutečné přepnutí. Dlouhodobá stabilita přihlášení a přepnutí při skutečném vyčerpání nejsou dosud prokázané. / Manual and controlled automatic handoffs were verified on the local installation. Automatic triggering used synthetic exhaustion with a real handoff. Long-term session stability and natural-exhaustion switching remain unverified.
+
+## 0.2.14 — zachování vybraného chatu / preserve selected chat
+
+CZ: Výpadek seznamu již nepřepne volbu na jiný chat. Nedostupný výběr zůstává zachován a odeslání je blokováno, dokud se chat nevrátí nebo uživatel nezvolí jiný. Sjednoceno číslo verze v přehledu, pluginu a pomocníkovi. Ověřeno třemi regresními testy a testem skutečného prohlížeče proti syntetickému API. Toto vydání neřeší opakované odhlašování a nedokládá živé předání účtu s pokračováním.
+
+EN: A temporary thread-list gap no longer changes the selected thread. An unavailable selection is retained and sending is blocked until the thread returns or the user explicitly selects another one. Dashboard, plugin and helper versions are aligned. Verified by three regression tests and a real-browser test against a synthetic API. This release does not resolve recurring sign-outs or establish successful live account handoff and continuation.
