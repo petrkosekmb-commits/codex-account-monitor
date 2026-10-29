@@ -43,6 +43,23 @@ var historyPatch=JsonSerializer.SerializeToElement(new {type="patches",revision=
 Check(paginated.Apply("chat","owner",historyPatch),"canonical history update requests a fresh snapshot");
 Check(!paginated.Read().Available,"incomplete history refresh cannot report ready");
 var exe=Environment.ProcessPath!;
+var shifting=Ledger();
+shifting.Apply("chat","owner",JsonSerializer.SerializeToElement(new {type="snapshot",revision=1,conversationState=new {
+ threadRuntimeStatus=new{type="active",activeFlags=Array.Empty<string>()},threadGoal=(object?)null,
+ turns=new[]{new {turnId="old",status="completed",turnStartedAtMs=100L},new{turnId="new",status="inProgress",turnStartedAtMs=200L}}
+}}));
+Check(shifting.Apply("chat","owner",JsonSerializer.SerializeToElement(new {type="patches",revision=2,baseRevision=1,patches=new[]{new {op="remove",path=new object[]{"turns",0}}}})),"removing earlier turn requires snapshot before stale index can be reused");
+Check(!shifting.Read().Available,"shifted turn indices cannot report verified state");
+var timing=Ledger();timing.Apply("chat","owner",JsonSerializer.SerializeToElement(new {type="snapshot",revision=1,conversationState=new {
+ threadRuntimeStatus=new{type="active",activeFlags=Array.Empty<string>()},threadGoal=(object?)null,
+ turns=new[]{new{turnId="old",status="inProgress",turnStartedAtMs=100L}}
+}}));
+timing.Apply("chat","owner",JsonSerializer.SerializeToElement(new {type="patches",revision=2,baseRevision=1,patches=new[]{new {op="replace",path=new object[]{"turns",0},value=new {turnId="new",status="inProgress",turnStartedAtMs=200L}}}}));
+Check(timing.Threads().Single().LastTurnStartedAtMs==200,"replacement turn owns its timestamp");
+timing.Apply("chat","owner",JsonSerializer.SerializeToElement(new {type="patches",revision=3,baseRevision=2,patches=new[]{new {op="replace",path=new object[]{"turns",0,"turnStartedAtMs"},value=300L}}}));
+Check(timing.Threads().Single().LastTurnStartedAtMs==300,"timestamp patch updates latest turn");
+timing.Apply("chat","owner",JsonSerializer.SerializeToElement(new {type="patches",revision=4,baseRevision=3,patches=new[]{new {op="remove",path=new object[]{"turns",0,"turnStartedAtMs"}}}}));
+Check(timing.Threads().Single().LastTurnStartedAtMs==null,"removed timestamp does not retain an old value");
 var launch=DesktopLaunch.Create(exe,"00000000-0000-0000-0000-000000000001");
 Check(launch.ArgumentList.SequenceEqual(new[]{"--single-argument","codex://threads/00000000-0000-0000-0000-000000000001"}),"cold launch carries the exact thread URL as one argument");
 Check(!launch.UseShellExecute,"desktop launch avoids shell command parsing");

@@ -160,6 +160,8 @@ internal sealed class AccountService
                         Vault.Upsert(latest);
                     }
                     profile.Usage = activeUsage; profile.Error = null;
+                    var currentPlan = activeUsage.Buckets.FirstOrDefault(b => b.Id == "codex")?.Plan;
+                    if (!string.IsNullOrWhiteSpace(currentPlan)) profile.Plan = currentPlan;
                     UsageHistory.Record(profile, activeUsage); Vault.Save();
                 }
                 RefreshHealth.Succeeded(key,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());

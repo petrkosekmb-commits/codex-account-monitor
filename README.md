@@ -79,3 +79,7 @@ Ruční i řízený automatický přechod byly živě ověřeny na místní inst
 CZ: Výpadek seznamu již nepřepne volbu na jiný chat. Nedostupný výběr zůstává zachován a odeslání je blokováno, dokud se chat nevrátí nebo uživatel nezvolí jiný. Sjednoceno číslo verze v přehledu, pluginu a pomocníkovi. Ověřeno třemi regresními testy a testem skutečného prohlížeče proti syntetickému API. Toto vydání neřeší opakované odhlašování a nedokládá živé předání účtu s pokračováním.
 
 EN: A temporary thread-list gap no longer changes the selected thread. An unavailable selection is retained and sending is blocked until the thread returns or the user explicitly selects another one. Dashboard, plugin and helper versions are aligned. Verified by three regression tests and a real-browser test against a synthetic API. This release does not resolve recurring sign-outs or establish successful live account handoff and continuation.
+
+## 0.2.15
+
+Oprava opakovaneho prihlaseni, instalace modulu zdravi uctu, aktualizace tarifu, zpracovani neplatnych pozadavku, ukonceni pomocnika a sledovani zmen tahu. Neplatny termin obnoveni neblokuje vykresleni. Overeni syntetickymi regresnimi testy; nejde o novy zivy test prepnuti uctu.

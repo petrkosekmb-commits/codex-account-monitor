@@ -13,7 +13,7 @@ async function handle(line){let m;try{m=JSON.parse(line);}catch{return;}
   if(m.id===undefined)return;
   try{
     let result;
-    if(m.method==='initialize')result={protocolVersion:m.params?.protocolVersion||'2024-11-05',capabilities:{tools:{}},serverInfo:{name:'codex-account-monitor',version:'0.2.9'}};
+    if(m.method==='initialize')result={protocolVersion:m.params?.protocolVersion||'2024-11-05',capabilities:{tools:{}},serverInfo:{name:'codex-account-monitor',version:'0.2.15'}};
     else if(m.method==='ping')result={};
     else if(m.method==='tools/list')result={tools:definitions};
     else if(m.method==='tools/call'){

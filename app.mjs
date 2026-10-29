@@ -92,7 +92,7 @@ function applySwitcherView(){
   }
 }
 async function beginLogin(id){
-  if(login||busy)throw new Error('Probíhá jiná kontrola nebo přihlášení.');
+  if(login?.bridge||login?.rpc||busy)throw new Error('Probíhá jiná kontrola nebo přihlášení.');
   const slot=state.slots.find(s=>s.id===id);if(!slot)throw new Error('Neplatný účet.');
   if(switcher){
     const operation=login={id,status:'starting',startedAt:Date.now(),bridge:true};

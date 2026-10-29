@@ -16,3 +16,14 @@ test('periodic refresh does not collide with an active login',async()=>{
  vm.runInContext(declaration('refresh','function applySwitcherView'),context);
  await vm.runInContext('refresh()',context);assert.equal(context.busy,false);assert.equal(context.state.refreshing,false);
 });
+
+test('finished login results do not block a new login while active operations do',async()=>{
+ for(const prior of [{status:'done'},{status:'error'},{bridge:true},{rpc:{}}]){
+  let calls=0;
+  const context=vm.createContext({Date,Error,login:prior,busy:false,state:{slots:[{id:4,email:'four@example.com'}]},
+    switcher:{request:async()=>{calls++;return {}; }},switcherView:null,applySwitcherView(){},save:async()=>{}});
+  vm.runInContext(declaration('beginLogin','async function finishLogin'),context);
+  if(prior.bridge||prior.rpc){await assert.rejects(vm.runInContext('beginLogin(4)',context));assert.equal(calls,0);}
+  else{await vm.runInContext('beginLogin(4)',context);assert.equal(calls,1);assert.equal(context.login.status,'done');}
+ }
+});
