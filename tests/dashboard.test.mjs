@@ -28,6 +28,10 @@ test('přehled zobrazuje serverem určený chat bez nabídky výběru',async()=>
   assert.match(d.elements.get('switcher').innerHTML,/Jiná rozpracovaná úloha/);
   assert.doesNotMatch(d.elements.get('cards').innerHTML,/data-switch="3" disabled/);
 });
+test('historie automatiky vysvětlí důvod bez identit chatů',async()=>{
+ const d=dashboard();await d.ready();vm.runInContext("state.automationHistory=[{at:1,decision:{reason:'Čekám na potvrzené vyčerpání.',enabled:true,ready:true,desktop:true,threadCount:2,waitingCount:0,activeCount:1,failedCount:0}}];draw()",d.context);
+ const html=d.elements.get('switcher').innerHTML;assert.match(html,/Historie rozhodnutí automatiky/);assert.match(html,/Čekám na potvrzené vyčerpání/);assert.match(html,/úlohy 2, čeká 0, běží 1, chyby 0/);assert.match(html,/Neobsahuje názvy chatů/);
+});
 
 test('stará chyba je historie a neblokuje nový pokus',async()=>{
   const d=dashboard();await d.ready();

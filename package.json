@@ -1,6 +1,6 @@
 {
-  "name": "codex-account-monitor",
-  "version": "0.2.17",
+  "name": "kosek-account-monitor",
+  "version": "0.2.18",
   "private": true,
   "type": "module",
   "scripts": {

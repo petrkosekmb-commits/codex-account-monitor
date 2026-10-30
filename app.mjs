@@ -1,4 +1,4 @@
-import {recordAutomationDecision} from './automation-history.mjs';
+import {recordAutomationDecision,publicAutomationHistory} from './automation-history.mjs';
 import http from 'node:http';
 import {createStateWriter} from './state-writer.mjs';
 import {loadAccountState} from './account-state.mjs';
@@ -131,6 +131,7 @@ async function cancelLogin(){
   if(old?.rpc){if(old.loginId)try{await old.rpc.request('account/login/cancel',{loginId:old.loginId},5000);}catch{}live.delete(old.rpc);old.rpc.close();}
 }
 function publicView(){const result=view(state);result.automation=state.automation??{enabled:false,status:"off"};result.activeError=state.activeError??null;result.login=login?{id:login.id,status:login.status,url:login.url??null,message:login.message??null}:null;
+  result.automationHistory=publicAutomationHistory(state.automationHistory);
   result.switcher={installed:!!switcher,ready:!!switcherView?.ready,desktop:!!switcherView?.desktop,error:switcherError,switching,
     threads:switcherView?.threads??[],pending:switcherView?.pending??null,lastSwitch:state.lastSwitch??null,history:state.switchHistory??[]};result.continuation=continuationView(switcherView?.threads,state.automation?.observedTurns);return result;}
 async function switchAccount(id,threadId,resume=false){
@@ -221,7 +222,7 @@ const server=http.createServer(async(req,res)=>{
     return send(404,{error:'Neznámý požadavek.'});
   }catch{return send(500,{error:'Požadavek se nepodařilo dokončit.'});}
 });
-const port=Number(process.env.ACCOUNT_MONITOR_PORT||55163);
+const port=Number(process.env.ACCOUNT_MONITOR_PORT||55162);
 if(!Number.isInteger(port)||port<1024||port>65535)throw new Error('Neplatný místní port přehledu.');
 await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,'127.0.0.1',resolve);});origin=`http://127.0.0.1:${server.address().port}`;
 await writeFile(join(DATA,'runtime.json'),JSON.stringify({pid:process.pid,url:origin,key}),{mode:0o600});

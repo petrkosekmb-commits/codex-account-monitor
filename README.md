@@ -1,3 +1,7 @@
+## 0.2.18 - filtrovana historie rozhodnuti automatiky
+
+Dashboard zobrazuje bezpecne filtrovane duvody a pocty rozhodnuti automatiky bez nazvu chatu, textu, tokenu nebo prihlasovacich udaju.
+
 # Přehled účtů Codex 0.2.17
 
 Místní přehled limitů čtyř účtů, kruhový odpočet do očekávané obnovy, údaje o platnosti předplatného a volitelné automatické přepínání. Nezávislý komunitní projekt pro Windows.
@@ -55,3 +59,4 @@ EN: A temporary thread-list gap no longer changes the selected thread. An unavai
 - Nejde o zaruku trvaleho prihlaseni. Vzdalenou sluzbou zrusene opravneni nelze obnovit bez uzivatele; testy odlisujeme od skutecneho automatickeho predani v provozu.
 
 English: Version 0.2.17 removes the required chat picker. Manual and automatic switching resolve the current unfinished task from the same live snapshot, ignoring legacy pinned selections. An exact pending continuation survives quota waits and is cancelled by newer work in another chat. Multiple running tasks, pending user input and uncertain chronology remain guarded. A shared 30-second snapshot-gap budget improves verification without resending messages. Authentication distinguishes access-token failures from confirmed refresh-grant rejection and preserves only allowlisted error codes. Ambiguous legacy rejection records receive one persisted re-evaluation. Confirmed invalid grants stay blocked. When automation is enabled, earned resets may be consumed for exhausted inactive accounts; ordinary read-only refreshes do not consume them. This release does not promise permanent sign-in or treat simulated tests as live handoff proof.
+
