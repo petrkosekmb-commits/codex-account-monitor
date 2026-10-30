@@ -1,8 +1,4 @@
-## 0.2.18 - filtrovana historie rozhodnuti automatiky
-
-Dashboard zobrazuje bezpecne filtrovane duvody a pocty rozhodnuti automatiky bez nazvu chatu, textu, tokenu nebo prihlasovacich udaju.
-
-# Přehled účtů Codex 0.2.17
+# Přehled účtů Codex 0.2.19
 
 Místní přehled limitů čtyř účtů, kruhový odpočet do očekávané obnovy, údaje o platnosti předplatného a volitelné automatické přepínání. Nezávislý komunitní projekt pro Windows.
 
@@ -12,7 +8,7 @@ Požadavky: Windows, Codex desktop a místní CLI, Node.js 20+, PowerShell 7 a .
 
 Soukromá edice obsahuje výchozí adresy čtyř účtů. Vlastní seznam má přednost v místním souboru accounts.json v datové složce; obsahuje objekt s polem accounts se čtyřmi různými adresami. Při zastaveném monitoru lze adresu nahradit nebo účty přeskládat. Verze 0.2.7 nejprve zálohuje původní stav do místní složky backups, zachová historii podle identity a nový účet založí bez starých limitů. Automatika se při změně seznamu vypne. Vyřazené přihlášení zůstává chráněné místně pro případ návratu, ale účet se nekontroluje ani nenabízí k přepnutí. Nedokončený přechod nejprve dokončete s původním seznamem. Provozní data jsou v %USERPROFILE%\Codex\account-monitor. Přihlašovací údaje součástí zdrojů nejsou.
 
-Spusťte bridge/Build.ps1, potom Install.ps1 a Spustit-prehled.cmd. Zdrojový ZIP neobsahuje sestavené binární soubory; sestavení je nutné. Skript ověřuje otisk připnutých zdrojů codex-switch a spouští 20 regresních kontrol. Přehled: http://127.0.0.1:55163. Účty se připojují oficiálním přihlášením v prohlížeči.
+Spusťte bridge/Build.ps1, potom Install.ps1 a Spustit-prehled.cmd. Zdrojový ZIP neobsahuje sestavené binární soubory; sestavení je nutné. Skript ověřuje otisk připnutých zdrojů codex-switch a spouští 20 regresních kontrol. Přehled: http://127.0.0.1:55162. Účty se připojují oficiálním přihlášením v prohlížeči.
 
 ## Přehled a přepínání
 
@@ -49,6 +45,12 @@ CZ: Výpadek seznamu již nepřepne volbu na jiný chat. Nedostupný výběr zů
 
 EN: A temporary thread-list gap no longer changes the selected thread. An unavailable selection is retained and sending is blocked until the thread returns or the user explicitly selects another one. Dashboard, plugin and helper versions are aligned. Verified by three regression tests and a real-browser test against a synthetic API. This release does not resolve recurring sign-outs or establish successful live account handoff and continuation.
 
+## 0.2.19 - filtrovana historie rozhodnuti automatiky
+
+Dashboard zobrazuje poslednich dvanact bezpecne filtrovanych rozhodnuti automatiky. U kazdeho je duvod, stav spojeni a pocty uloh; nezobrazuji se nazvy, texty chatu, tokeny ani prihlasovaci udaje. Tato historie pomaha rozlisit cekani na overeni, blokaci soubehem, nejednoznacny chat a skutecne zahajeny prechod.
+
+English: Version 0.2.19 adds an allowlisted automation-decision history to the dashboard. It shows the reason, connection state and task counts without chat titles, chat text, tokens or credentials, making skipped and started automatic switches auditable.
+
 ## 0.2.17 - cekani na limit a presnejsi obnoveni prihlaseni
 
 - Automatika uchova konkretni cekajici tah az 24 hodin, pokud je ucet stale vycerpany. Novy tah, dokonceni, zmena uctu nebo limitoveho okna cekani zrusi. Dalsi aktivni chat zustava prekazkou prepnuti.
@@ -59,4 +61,3 @@ EN: A temporary thread-list gap no longer changes the selected thread. An unavai
 - Nejde o zaruku trvaleho prihlaseni. Vzdalenou sluzbou zrusene opravneni nelze obnovit bez uzivatele; testy odlisujeme od skutecneho automatickeho predani v provozu.
 
 English: Version 0.2.17 removes the required chat picker. Manual and automatic switching resolve the current unfinished task from the same live snapshot, ignoring legacy pinned selections. An exact pending continuation survives quota waits and is cancelled by newer work in another chat. Multiple running tasks, pending user input and uncertain chronology remain guarded. A shared 30-second snapshot-gap budget improves verification without resending messages. Authentication distinguishes access-token failures from confirmed refresh-grant rejection and preserves only allowlisted error codes. Ambiguous legacy rejection records receive one persisted re-evaluation. Confirmed invalid grants stay blocked. When automation is enabled, earned resets may be consumed for exhausted inactive accounts; ordinary read-only refreshes do not consume them. This release does not promise permanent sign-in or treat simulated tests as live handoff proof.
-

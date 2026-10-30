@@ -18,8 +18,22 @@ test('account changes recorded even with same reason and history is bounded',()=
  assert.equal(s.automationHistory.length,1000);
  s.automation={enabled:false};assert.equal(s.automationHistory.length,1000);
 });
-test('public history is allowlisted and truncates unsafe fields',()=>{
+test('public history rejects free text even inside allowed fields',()=>{
  const result=publicAutomationHistory([{at:10,decision:{reason:'x'.repeat(300),sourceId:2,threadCount:3,slots:[{id:2,connected:true,secret:'do-not-copy'}],secret:'do-not-copy'}}]);
- assert.equal(result.length,1);assert.equal(result[0].at,10);assert.equal(result[0].decision.reason.length,180);assert.equal(result[0].decision.sourceId,2);
+ assert.equal(result.length,1);assert.equal(result[0].at,10);assert.equal(result[0].decision.reason,'Stav automatiky nebyl popsán.');assert.equal(result[0].decision.sourceId,2);
  assert.doesNotMatch(JSON.stringify(result),/do-not-copy/);assert.deepEqual(result[0].decision.slots,[{id:2,connected:true,error:false,reauth:false,availability:'unknown'}]);
 });
+test('history sanitizes reason and status contents, invalid slot ids and counts',()=>{
+ const result=publicAutomationHistory([{at:1e100,decision:{reason:'private@example.com secret-token',sourceId:99,threadCount:-1,slots:[{id:99,availability:'secret-token'}]}}]);
+ assert.doesNotMatch(JSON.stringify(result),/private|secret/);
+ assert.equal(result[0].at,null);assert.equal(result[0].decision.sourceId,null);assert.equal(result[0].decision.threadCount,0);
+ assert.equal(result[0].decision.slots[0].availability,'unknown');
+ assert.equal(publicAutomationHistory([{at:10}],0).length,0);
+});
+test('known reasons and exact bounded dynamic reasons survive filtering',()=>{
+ for(const reason of ['Právě používaný účet nemá potvrzené vyčerpání limitu.','Přepínám na účet 4.']){
+  assert.equal(publicAutomationHistory([{at:10,decision:{reason}}])[0].decision.reason,reason);
+ }
+ assert.equal(publicAutomationHistory([{decision:{reason:'Přepínám na účet 4. secret'}}])[0].decision.reason,'Stav automatiky nebyl popsán.');
+});
+

@@ -75,3 +75,22 @@ test('confirmed revoked account keeps actionable login button',async()=>{
  const d=dashboard();await d.ready();vm.runInContext("state.slots[0].requiresReauthentication=true;draw()",d.context);
  assert.match(d.elements.get('cards').innerHTML,/Obnovit neplatné přihlášení/);assert.doesNotMatch(d.elements.get('cards').innerHTML,/<summary>Správa přihlášení/);
 });
+test('invalid subscription timestamps cannot prevent rendering all account cards',async()=>{
+ const d=dashboard();await d.ready();
+ for(const value of [1e100,Infinity,-1,'invalid']){
+  d.context.invalidStamp=value;
+  assert.doesNotThrow(()=>vm.runInContext('state.slots[0].subscription={activeUntil:invalidStamp,checkedAt:invalidStamp};draw()',d.context));
+  assert.match(d.elements.get('cards').innerHTML,/data-switch="3"/);
+  assert.doesNotMatch(d.elements.get('cards').innerHTML,/Invalid Date|NaN|Infinity/);
+ }
+});
+test('each account card shows available reset credits without offering an unsafe manual reset',async()=>{
+ const d=dashboard();await d.ready();
+ vm.runInContext("state.slots[0].snapshot={limits:{resetCredits:2,windows:[]}};draw()",d.context);
+ let html=d.elements.get('cards').innerHTML;
+ assert.match(html,/K dispozici jsou 2 resety limitu/);
+ assert.match(html,/pouze zapnutá automatika/);
+ assert.doesNotMatch(html,/Resetovat limit|Obnovit limit/);
+ vm.runInContext("state.slots[0].snapshot.limits.resetCredits=0;draw()",d.context);
+ assert.match(d.elements.get('cards').innerHTML,/Reset limitu není k dispozici/);
+});

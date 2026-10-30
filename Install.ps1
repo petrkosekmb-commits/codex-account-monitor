@@ -4,7 +4,7 @@ $catalogRoot = Join-Path $env:LOCALAPPDATA 'CodexAccountMonitorTools'
 $installPath = Join-Path $catalogRoot 'plugins\account-monitor'
 if (Test-Path -LiteralPath $catalogRoot) { throw 'Cil instalace uz existuje; neprepisuji jej.' }
 New-Item -ItemType Directory -Path $installPath -Force | Out-Null
-$entries = @('account-health.mjs','current-chat.mjs','state-writer.mjs','config.mjs','accounts.example.json','LICENSE','account-state.mjs','app.mjs','core.mjs','rpc.mjs','server.mjs','switcher.mjs','switch-flow.mjs','automatic-switch.mjs','index.html','package.json','README.md','THIRD_PARTY_NOTICES.md','OVERENI.md','Spustit-prehled.ps1','Spustit-prehled.cmd','.mcp.json','.codex-plugin','scripts','tests')
+$entries = @('account-health.mjs','state-writer.mjs','config.mjs','accounts.example.json','LICENSE','account-state.mjs','app.mjs','core.mjs','rpc.mjs','server.mjs','switcher.mjs','switch-flow.mjs','automatic-switch.mjs','automation-history.mjs','current-chat.mjs','index.html','package.json','README.md','THIRD_PARTY_NOTICES.md','OVERENI.md','Spustit-prehled.ps1','Spustit-prehled.cmd','.mcp.json','.codex-plugin','scripts','tests')
 foreach ($entry in $entries) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $entry) -Destination $installPath -Recurse }
 foreach ($entry in $entries) {
     $sourceItem = Get-Item -LiteralPath (Join-Path $PSScriptRoot $entry)
