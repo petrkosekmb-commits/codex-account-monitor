@@ -1,3 +1,4 @@
+import {recordAutomationDecision} from './automation-history.mjs';
 import http from 'node:http';
 import {createStateWriter} from './state-writer.mjs';
 import {loadAccountState} from './account-state.mjs';
@@ -6,16 +7,17 @@ import {existsSync} from 'node:fs';
 import {join,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {randomBytes,createHash} from 'node:crypto';
-import {record,sameEmail,view} from './core.mjs';
+import {EMAILS,record,sameEmail,view} from './core.mjs';
 import {Rpc} from './rpc.mjs';
 import {Switcher,bridgeInstalled} from './switcher.mjs';
 import {runSwitch} from './switch-flow.mjs';
 import {automaticSwitch} from './automatic-switch.mjs';
+import {currentChat,continuationView} from './current-chat.mjs';
 import {observeAccountHealth} from './account-health.mjs';
 import {readAccountConfig} from './config.mjs';
 const ROOT=dirname(fileURLToPath(import.meta.url));
-const DATA=process.env.ACCOUNT_MONITOR_DATA||join(process.env.LOCALAPPDATA||process.env.USERPROFILE,'CodexAccountMonitor');
-const accounts=await readAccountConfig(join(DATA,'accounts.json'));
+const DATA=process.env.ACCOUNT_MONITOR_DATA||join(process.env.USERPROFILE,'Codex','account-monitor');
+const accounts=await readAccountConfig(join(DATA,'accounts.json'),EMAILS);
 await mkdir(DATA,{recursive:true});
 const statePath=join(DATA,'state.json'),lockPath=join(DATA,'monitor.lock');
 let lock;
@@ -56,11 +58,11 @@ function save(){const copy=JSON.stringify({...state,refreshing:false},null,2);sa
 function profileHome(id){const email=state.slots.find(s=>s.id===id).email.toLowerCase();return join(DATA,'profiles',createHash('sha256').update(email).digest('hex').slice(0,24));}
 async function query(rpc){const {account}=await rpc.request('account/read',{refreshToken:false});if(account?.type!=='chatgpt'||!account.email)throw new Error('Chybí přihlášení účtu ChatGPT.');const raw=await rpc.request('account/rateLimits/read');return {account,raw};}
 async function withRpc(home,fn){const rpc=new Rpc(home);live.add(rpc);try{await rpc.start();return await fn(rpc);}finally{live.delete(rpc);rpc.close();}}
-async function refresh(){
+async function refresh(allowResetCredits=false){
   if(busy||login?.bridge||login?.rpc)return;busy=true;state.refreshing=true;
   try{
     if(switcher){
-      try{switcherView=await switcher.request('refresh');applySwitcherView();switcherError=null;}
+      try{switcherView=await switcher.request('refresh',{allowResetCredits});applySwitcherView();switcherError=null;}
       catch{switcherError='Účty nebo spojení s aplikací se nepodařilo ověřit.';for(const s of state.slots)if(s.connected)s.error=switcherError;}
       await save();return;
     }
@@ -92,7 +94,7 @@ function applySwitcherView(){
   }
 }
 async function beginLogin(id){
-  if(login?.bridge||login?.rpc||busy)throw new Error('Probíhá jiná kontrola nebo přihlášení.');
+  if(login||busy)throw new Error('Probíhá jiná kontrola nebo přihlášení.');
   const slot=state.slots.find(s=>s.id===id);if(!slot)throw new Error('Neplatný účet.');
   if(switcher){
     const operation=login={id,status:'starting',startedAt:Date.now(),bridge:true};
@@ -130,7 +132,7 @@ async function cancelLogin(){
 }
 function publicView(){const result=view(state);result.automation=state.automation??{enabled:false,status:"off"};result.activeError=state.activeError??null;result.login=login?{id:login.id,status:login.status,url:login.url??null,message:login.message??null}:null;
   result.switcher={installed:!!switcher,ready:!!switcherView?.ready,desktop:!!switcherView?.desktop,error:switcherError,switching,
-    threads:switcherView?.threads??[],pending:switcherView?.pending??null,lastSwitch:state.lastSwitch??null,history:state.switchHistory??[]};return result;}
+    threads:switcherView?.threads??[],pending:switcherView?.pending??null,lastSwitch:state.lastSwitch??null,history:state.switchHistory??[]};result.continuation=continuationView(switcherView?.threads,state.automation?.observedTurns);return result;}
 async function switchAccount(id,threadId,resume=false){
   if(!switcher||!switcherView?.ready||switching||busy||login?.bridge||login?.rpc)throw new Error('Přepínač není připravený nebo právě probíhá jiná operace.');
   const slot=state.slots.find(s=>s.id===id);if(!slot?.connected)throw new Error('Nejdřív jednou přihlas vybraný účet.');
@@ -139,9 +141,9 @@ async function switchAccount(id,threadId,resume=false){
     if(chats.length!==1)throw new Error('Připravený přechod nemá jednoznačně určený chat.');
     threadId=chats[0].id;
   }else if(!threadId){
-    const chats=(switcherView?.threads??[]).filter(t=>t.status==='active'||['failed','interrupted'].includes(t.lastTurnStatus)||t.goal==='active');
-    if(chats.length!==1)throw new Error('Vyber jeden rozpracovaný chat pro pokračování.');
-    threadId=chats[0].id;
+    const selected=currentChat(switcherView?.threads,state.automation?.observedTurns);
+    if(!selected.thread)throw new Error(selected.reason);
+    threadId=selected.thread.id;
   }
   const beforeTurnId=switcherView?.threads?.find(t=>t.id===threadId)?.lastTurnId;
   switching=true;busy=true;
@@ -171,7 +173,7 @@ const server=http.createServer(async(req,res)=>{
       const options=JSON.parse(body);
       if(typeof options.enabled!=='boolean'||options.threadId&&!/^[a-f0-9-]{36}$/i.test(options.threadId))return send(400,{error:'Neplatné nastavení automatiky.'});
       if(options.enabled&&(!switcherView?.ready||!switcherView.desktop||switcherView.pending||switching||busy||login?.bridge||login?.rpc))return send(409,{error:'Nejdřív ověř spojení a dokonči připravený přechod.'});
-      state.automation={enabled:options.enabled,threadId:options.threadId??null,attempts:state.automation?.attempts??{},status:options.enabled?'waiting':'off'};
+      state.automation={enabled:options.enabled,attempts:state.automation?.attempts??{},status:options.enabled?'waiting':'off'};
       await save();return send(200,{ok:true});
     }
     if(req.url==='/api/dismiss-switch'&&req.method==='POST'){
@@ -185,18 +187,33 @@ const server=http.createServer(async(req,res)=>{
     }
     if((req.url==='/api/switch'||req.url==='/api/resume')&&req.method==='POST'){
       let body='';for await(const chunk of req){body+=chunk;if(body.length>1024)return send(413,{error:'Příliš dlouhý požadavek.'});}
-      const {id,threadId}=JSON.parse(body);
+      const {id}=JSON.parse(body);let threadId;
       if(!Number.isInteger(id)||id<1||id>4||threadId&& !/^[a-f0-9-]{36}$/i.test(threadId))return send(400,{error:'Neplatný účet nebo úloha.'});
       const rejectSwitch=async error=>{
         state.switchHistory=[...(state.switchHistory??[]),{id,threadId,requestedAt:Date.now(),status:'error',phase:'Rejected',accountApplied:false,error}].slice(-20);
         await save();return send(409,{error});
       };
       const target=state.slots.find(s=>s.id===id);
-      if(req.url==='/api/switch'&&switcherView?.pending)return rejectSwitch('Předchozí přechod čeká na vyřešení. Použij jeho obnovení nebo zrušení v horní části přehledu.');
-      if(req.url==='/api/switch'&&!threadId&&(switcherView?.threads??[]).filter(t=>t.status==='active'||['failed','interrupted'].includes(t.lastTurnStatus)||t.goal==='active').length!==1)return rejectSwitch('Vyber konkrétní rozpracovaný chat pro pokračování.');
-      if(req.url==='/api/switch'&&(sameEmail(target?.email,state.activeEmail)||target?.error))return rejectSwitch('Vyber jiný účet s ověřeným přihlášením.');
-      if(switcherView?.threads?.some(t=>t.waiting))return rejectSwitch('Codex hlásí čekání na schválení nebo odpověď. Vyčkej na dokončení probíhající odpovědi a případně vyřeš požadavek v uvedeném chatu.');
-      if(!switcherView?.ready||!switcherView?.desktop||!state.slots.find(s=>s.id===id)?.connected||busy||switching||login?.bridge||login?.rpc)return rejectSwitch('Nejdřív připoj účet a vyčkej na ověření spojení s Codexem.');
+      const blocked=()=>{
+        if(busy||switching||login?.bridge||login?.rpc)return 'Probíhá jiná operace. Vyčkej na její dokončení.';
+        if(!switcherView?.ready||!switcherView?.desktop||!target?.connected)return 'Nejdřív připoj účet a vyčkej na ověření spojení s Codexem.';
+        if(req.url==='/api/switch'&&switcherView.pending)return 'Předchozí přechod čeká na vyřešení. Použij jeho obnovení nebo zrušení v horní části přehledu.';
+        if(req.url==='/api/switch'&&(sameEmail(target.email,state.activeEmail)||target.error))return 'Vyber jiný účet s ověřeným přihlášením.';
+        if(req.url==='/api/resume'&&(switcherView.pending?.chats?.length!==1||!sameEmail(target.email,switcherView.pending.targetEmail)))return 'Připravený přechod nemá ověřený cílový účet a jediný chat.';
+        return '';
+      };
+      let reason=blocked();if(reason)return rejectSwitch(reason);
+      const fresh=await switcher.request('status',{},10000);
+      // A second request or periodic refresh can win while status is pending.
+      // Do not overwrite an in-flight operation with this older snapshot.
+      if(busy||switching||login?.bridge||login?.rpc)return rejectSwitch('Probíhá jiná operace. Vyčkej na její dokončení.');
+      switcherView=fresh;applySwitcherView();
+      reason=blocked();if(reason)return rejectSwitch(reason);
+      if(req.url==='/api/switch'){
+        const selected=currentChat(switcherView?.threads,state.automation?.observedTurns);
+        if(!selected.thread)return rejectSwitch(selected.reason);
+        threadId=selected.thread.id;
+      }
       void switchAccount(id,threadId,req.url==='/api/resume').catch(()=>{});return send(202,{requested:true});
     }
     if(req.url==='/api/cancel'&&req.method==='POST'){await cancelLogin();return send(200,{ok:true});}
@@ -213,12 +230,17 @@ void refresh().catch(()=>{});
 const timer=setInterval(()=>{if(!login?.rpc&&!login?.bridge&&!switching)void refresh().catch(()=>{});else if(login&&Date.now()-login.startedAt>15*60*1000)void cancelLogin();},5*60*1000);
 let autoBusy=false;
 const automaticTimer=setInterval(async()=>{
-  if(!state.automation?.enabled||autoBusy||busy||switching||login?.bridge||login?.rpc)return;
+  if(autoBusy)return;
+  if(!state.automation?.enabled||busy||switching||login?.bridge||login?.rpc){
+    const reason=!state.automation?.enabled?'Automatika vypnutá.':switching?'Probíhá přepnutí.':login?.bridge||login?.rpc?'Probíhá přihlášení.':'Probíhá kontrola nebo jiná operace.';
+    if(recordAutomationDecision(state,{...switcherView,switching},reason))await save().catch(()=>{});
+    return;
+  }
   autoBusy=true;
   try{
-    await refresh();
+    await refresh(true);
     await automaticSwitch({state,switcher:{...switcherView,switching},save,switchAccount});
-  }catch{state.automation.enabled=false;state.automation.status='error';state.automation.message='Kontrola automatiky selhala; stav ověř ručně.';await save().catch(()=>{});}
+  }catch{state.automation.enabled=false;state.automation.status='error';state.automation.message='Kontrola automatiky selhala; stav ověř ručně.';recordAutomationDecision(state,switcherView,state.automation.message);await save().catch(()=>{});}
   finally{autoBusy=false;}
 },30000);
 const statusTimer=setInterval(async()=>{if(switcher&&!busy&&!switching){try{switcherView=await switcher.request('status',{},5000);}catch{switcherView=null;switcherError='Spojení s pomocníkem není ověřené.';}}},5000);

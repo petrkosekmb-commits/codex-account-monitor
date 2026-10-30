@@ -31,7 +31,7 @@ export class Rpc{
       }else if(m.id!==undefined){this.write({id:m.id,error:{code:-32601,message:'Monitor neprovádí nástroje ani úlohy.'}});
       }else for(const fn of this.listeners)fn(m);
     });
-    await this.request('initialize',{clientInfo:{name:'codex_account_monitor',title:'Přehled účtů',version:'0.1.0'}});
+    await this.request('initialize',{clientInfo:{name:'account_monitor',title:'Přehled účtů',version:'0.2.17'}});
     this.write({method:'initialized'});return this;
   }
   write(m){this.child.stdin.write(JSON.stringify(m)+'\n');}

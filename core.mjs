@@ -1,4 +1,5 @@
 export const EXAMPLE_EMAILS=Array.from({length:4},(_,i)=>`account${i+1}@example.com`);
+export const EMAILS=EXAMPLE_EMAILS;
 export const FRESH_MS=10*60*1000;
 export function initialState(emails=EXAMPLE_EMAILS){return {version:1,slots:emails.map((email,i)=>({id:i+1,email,connected:false,snapshot:null,history:[]}))};}
 export function sameEmail(a,b){return typeof a==='string'&&typeof b==='string'&&a.toLowerCase()===b.toLowerCase();}

@@ -47,10 +47,17 @@ var missingCalls=0;
 try { await InactiveUsageReader.RenewAsync((m,p)=>{missingCalls++;return Task.FromResult(JsonSerializer.SerializeToElement(new {account=(object?)null}));},()=>true,"one@example.com"); throw new Exception("Null account accepted"); }
 catch(SessionCredentialException e){Check(e.Code==SessionCredentialPolicy.Retry && missingCalls==2,"null account alone is transient; one bounded usage probe follows renewal");}
 try { await InactiveUsageReader.RenewAsync((m,p)=>throw new CodexRequestException("refresh_token_reused",m),()=>true,"one@example.com"); throw new Exception("Revoked grant accepted"); }
-catch(CodexRequestException e){Check(SessionCredentialPolicy.ClassifyFailure(e.Message)==SessionCredentialPolicy.Reauthenticate,"renewal preserves confirmed terminal errors");}
+catch(SessionCredentialException e){Check(e.Code==SessionCredentialPolicy.Reauthenticate&&e.FailureCode=="refresh_token_reused","renewal preserves confirmed terminal errors for the persistent guard");}
 var revokedCalls=new List<string>();
 try { await InactiveUsageReader.RenewAsync((m,p)=>{revokedCalls.Add(m);if(m=="account/read")return Task.FromResult(JsonSerializer.SerializeToElement(new{account=(object?)null}));throw new CodexRequestException("401 token_revoked",m);},()=>true,"one@example.com");throw new Exception("Revoked session accepted"); }
-catch(SessionCredentialException e){Check(e.Code==SessionCredentialPolicy.Reauthenticate && revokedCalls.Count==2,"revoked token after attempted renewal produces actionable reauthentication");}
+catch(SessionCredentialException e){Check(e.Code==SessionCredentialPolicy.Retry && revokedCalls.Count==2,"revoked access token does not prove a revoked refresh grant");}
+foreach(var text in new[]{"401 token_revoked","403 forbidden","prefix_refresh_token_reused_suffix","network timeout"})
+ Check(RefreshFailureEvidence.Code(text)==null,"ambiguous stderr never establishes terminal refresh failure");
+Check(RefreshFailureEvidence.Code("refresh failed: refresh_token_reused secret=synthetic-secret one@example.com")=="refresh_token_reused","stderr extracts only a fixed terminal code");
+try { await InactiveUsageReader.RenewAsync((m,p)=>Task.FromResult(JsonSerializer.SerializeToElement(new{account=(object?)null})),()=>true,"one@example.com",()=>"refresh_token_expired");throw new Exception("Explicit stderr failure ignored"); }
+catch(SessionCredentialException e){Check(e.Code==SessionCredentialPolicy.Reauthenticate&&SessionCredentialPolicy.Diagnostic(e)=="session_reauthentication_required/refresh_token_expired","hidden refresh failure retains precise safe evidence");}
+try { await InactiveUsageReader.RenewAsync((m,p)=>{if(m=="account/read")return Task.FromResult(JsonSerializer.SerializeToElement(new{account=(object?)null}));throw new CodexRequestException("invalid_grant synthetic-secret one@example.com",m);},()=>true,"one@example.com");throw new Exception("Explicit probe failure ignored"); }
+catch(SessionCredentialException e){Check(SessionCredentialPolicy.Diagnostic(e)=="session_reauthentication_required/invalid_grant","probe terminal evidence is retained without raw error or identity");}
 var rotated=auth.Replace("synthetic-refresh","rotated-refresh");
 Check(RuntimeHome.CanRecover(RuntimeHome.Hash(auth),auth,rotated),"orphaned rotation can recover only from the exact previous credential");
 Check(!RuntimeHome.CanRecover(RuntimeHome.Hash(auth),rotated,auth),"old orphan cannot roll back a newer credential");
@@ -88,14 +95,23 @@ try {
 } finally { if(Directory.Exists(recoveryDir))Directory.Delete(recoveryDir,true); }
 var guardDir=Path.Combine(Path.GetTempPath(),"refresh-guard-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(guardDir);
 try {
+ var legacy=new RefreshGuard(guardDir);legacy.Failed("legacy",auth,true,1,new SessionCredentialException(SessionCredentialPolicy.Reauthenticate));
+ var migrated=new RefreshGuard(guardDir);migrated.Begin("legacy",auth,2);
+ try{new RefreshGuard(guardDir).Begin("legacy",auth,3);throw new Exception("Legacy retry was repeated");}catch(SessionCredentialException e){Check(e.Code=="session_refresh_backoff","legacy ambiguous rejection gets one persisted recheck across restarts");}
+ migrated.Failed("legacy",auth,true,4,new SessionCredentialException(SessionCredentialPolicy.Reauthenticate,"refresh_token_reused"));
+ try{new RefreshGuard(guardDir).Begin("legacy",auth,9000000);throw new Exception("Specific terminal evidence bypassed");}catch(SessionCredentialException e){Check(e.Code==SessionCredentialPolicy.Reauthenticate,"specific terminal evidence never reopens on migration or restart");}
+ Check(JsonSerializer.Serialize(new RefreshGuard(guardDir).Status("legacy")).Contains("refresh_token_reused"),"terminal cause remains available after restart");
  var guard=new RefreshGuard(guardDir);guard.Begin("private-account",auth,1000);
  try{new RefreshGuard(guardDir).Begin("private-account",auth,1001);throw new Exception("restart bypassed guard");}catch(SessionCredentialException e){Check(e.Code=="session_refresh_backoff","pending refresh is throttled across process restarts");}
  guard.Failed("private-account",auth,true,2000);
  try{new RefreshGuard(guardDir).Begin("private-account",auth.Replace("synthetic-access","another-access"),9000000);throw new Exception("access change bypassed terminal guard");}catch(SessionCredentialException e){Check(e.Code==SessionCredentialPolicy.Reauthenticate,"same rejected refresh token stays blocked when access metadata changes");}
  try{new RefreshGuard(guardDir).Begin("private-account",auth,9000000);throw new Exception("terminal grant reused");}catch(SessionCredentialException e){Check(e.Code==SessionCredentialPolicy.Reauthenticate,"confirmed rejected credential is not repeatedly refreshed");}
- guard.Begin("private-account",rotated,3000);guard.Failed("private-account",rotated,false,4000);
+ guard.Begin("private-account",rotated,3000);guard.Failed("private-account",rotated,false,4000,new IOException("network timeout synthetic-secret one@example.com"));
  try{new RefreshGuard(guardDir).Begin("private-account",rotated,4001);throw new Exception("transient retry storm");}catch(SessionCredentialException e){Check(e.Code=="session_refresh_backoff","transient failure uses persisted retry delay");}
- new RefreshGuard(guardDir).Begin("private-account",rotated,200000);
+ var recoveredGuard=new RefreshGuard(guardDir);var diag=JsonSerializer.Serialize(recoveredGuard.Status("private-account"));
+ Check(diag.Contains("IOException:network,timeout")&&!diag.Contains("synthetic-secret")&&!diag.Contains("example.com"),"original sanitized failure survives backoff and restart");
+ recoveredGuard.Begin("private-account",rotated,200000);
+ Check(JsonSerializer.Serialize(recoveredGuard.Status("private-account")).Contains("IOException:network,timeout"),"starting retry retains previous failure");
  guard.Succeeded("private-account",200001);new RefreshGuard(guardDir).Begin("private-account",rotated,200002);
  var raw=File.ReadAllText(Path.Combine(guardDir,"refresh-health.json"));Check(!raw.Contains("synthetic-")&&!raw.Contains("private-account")&&!raw.Contains("example.com"),"refresh ledger stores no credentials or personal identities");
  Check(!AccountErrors.Describe("session_refresh_backoff")!.Contains("znovu přihl"),"backoff does not ask for new login");

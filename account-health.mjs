@@ -12,5 +12,5 @@ export function observeAccountHealth(slot,account,now=Date.now()){
   }
   health.status=status;slot.health=health;
   const r=account?.refreshHealth;
-  slot.refreshHealth=r?{result:['refresh_started','refresh_retry_later','refresh_rejected','verified'].includes(r.result)?r.result:'unknown',failures:Number.isInteger(r.failures)?r.failures:0,nextAttemptAt:Number.isFinite(r.nextAttemptAt)&&r.nextAttemptAt<8.64e15?r.nextAttemptAt:null,updatedAt:Number.isFinite(r.updatedAt)?r.updatedAt:null}:null;
+  slot.refreshHealth=r?{result:['refresh_started','refresh_retry_later','refresh_rejected','verified'].includes(r.result)?r.result:'unknown',failures:Number.isInteger(r.failures)?r.failures:0,nextAttemptAt:Number.isFinite(r.nextAttemptAt)&&r.nextAttemptAt<8.64e15?r.nextAttemptAt:null,updatedAt:Number.isFinite(r.updatedAt)?r.updatedAt:null,failureDiagnostic:typeof r.failureDiagnostic==='string'?r.failureDiagnostic.slice(0,240):null}:null;
 }

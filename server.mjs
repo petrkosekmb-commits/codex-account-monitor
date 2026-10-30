@@ -1,7 +1,7 @@
 import {createInterface} from 'node:readline';
 import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
-const data=process.env.ACCOUNT_MONITOR_DATA||join(process.env.LOCALAPPDATA||process.env.USERPROFILE,'CodexAccountMonitor');
+const data=process.env.ACCOUNT_MONITOR_DATA||join(process.env.USERPROFILE,'Codex','account-monitor');
 const definitions=[
   {name:'account_overview',description:'Přehled čtyř konkrétních účtů, zbývající zahrnuté limity, jejich stáří, očekávaná obnova a historie zjištěného vyčerpání. Neznámé a staré stavy nejsou důkazem dostupnosti. Časy jsou Unix ms; zobrazuj Europe/Prague.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,destructiveHint:false}},
   {name:'refresh_limits',description:'Vyžádá kontrolu přihlášeného účtu a tří dalších samostatně připojených účtů. Nepřepíná přihlášení aplikace, neposílá úlohy, nespotřebovává ruční reset. Po chvíli znovu načti account_overview.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,destructiveHint:false}}
@@ -13,7 +13,7 @@ async function handle(line){let m;try{m=JSON.parse(line);}catch{return;}
   if(m.id===undefined)return;
   try{
     let result;
-    if(m.method==='initialize')result={protocolVersion:m.params?.protocolVersion||'2024-11-05',capabilities:{tools:{}},serverInfo:{name:'codex-account-monitor',version:'0.2.15'}};
+    if(m.method==='initialize')result={protocolVersion:m.params?.protocolVersion||'2024-11-05',capabilities:{tools:{}},serverInfo:{name:'account-monitor',version:'0.2.17'}};
     else if(m.method==='ping')result={};
     else if(m.method==='tools/list')result={tools:definitions};
     else if(m.method==='tools/call'){

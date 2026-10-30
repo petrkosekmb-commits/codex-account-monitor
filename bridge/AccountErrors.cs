@@ -7,6 +7,7 @@ internal static class AccountErrors
     internal static string? Describe(string? error) => error switch
     {
         null => null,
+        "session_refresh_backoff" => "Obnova přihlášení čeká po neúspěšném pokusu. Přihlášení zůstává uložené; další pokus proběhne automaticky.",
         "session_account_unavailable" => "Služba nyní nepotvrdila přihlášený účet. Přihlášení zůstává uložené; kontrola se zopakuje.",
         "desktop_session_refresh_pending" => "Čekám na automatickou obnovu přihlášení v Codexu. Kontrola se zopakuje.",
         "usage_check_retry" => "Kontrola limitů se nezdařila. Přihlášení zůstává uložené; kontrola se zopakuje.",

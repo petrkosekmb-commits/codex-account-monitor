@@ -70,5 +70,14 @@
   "tests/login-race.test.mjs",
   "bridge/ContinuationReceipt.cs",
   "tests/selection.test.mjs",
-  "tests/health-render.test.mjs"
+  "tests/health-render.test.mjs",
+  "current-chat.mjs",
+  "bridge/compat/CodexRpc.cs",
+  "bridge/compat/RefreshFailureEvidence.cs",
+  "bridge/compat/ResetCreditPolicy.cs",
+  "bridge/compat/ResetCreditCoordinator.cs",
+  "automation-history.mjs",
+  "scripts/test-live.mjs",
+  "tests/automation-history.test.mjs",
+  "tests/current-chat.test.mjs"
 ]

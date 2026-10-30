@@ -24,6 +24,8 @@ internal sealed class AccountService
     public int RefreshingCount => _queries.RunningCount;
     public event Action? Changed;
     private readonly RefreshCoordinator _queries;
+    private readonly AsyncLocal<bool> _allowResetCredits = new();
+    private readonly ResetCreditCoordinator _resetCredits;
     private readonly SemaphoreSlim _querySlots = new(3, 3);
     private readonly SemaphoreSlim _loginGate = new(1, 1);
     private readonly SemaphoreSlim _switchGate = new(1, 1);
@@ -39,6 +41,7 @@ internal sealed class AccountService
     {
         Vault = vault; CodexHome = Path.GetFullPath(codexHome);
         RefreshHealth = new RefreshGuard(vault.DirectoryPath);
+        _resetCredits = new ResetCreditCoordinator(vault.DirectoryPath);
         _linuxClient = linuxClient; _contextDirectory = Path.GetFullPath(contextDirectory ?? codexHome);
         if (OperatingSystem.IsLinux() && linuxClient == null) LinuxDesktop = new(CodexHome);
         _queries = new RefreshCoordinator(refreshOperation ?? RefreshCoreAsync);
@@ -106,17 +109,22 @@ internal sealed class AccountService
             if (result != null) updated?.Invoke(result);
         })).ConfigureAwait(false);
     }
-    public async Task RefreshAccountAsync(string key, CancellationToken cancellation, bool supersede = false)
+    public async Task RefreshAccountAsync(string key, CancellationToken cancellation, bool supersede = false, bool allowResetCredits = false)
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellation, _shutdown.Token);
         linked.Token.ThrowIfCancellationRequested();
         Task? pendingSwitch;
         lock (Vault.SyncRoot) pendingSwitch = _switchTargets.Contains(key) ? _switchFinished?.Task : null;
         if (pendingSwitch != null) await pendingSwitch.WaitAsync(linked.Token).ConfigureAwait(false);
-        await _queries.Schedule(key, linked.Token, supersede).ConfigureAwait(false);
+        // RefreshCoordinator captures this request's execution context. A joined
+        // read-only refresh is never upgraded by a concurrent opt-in caller.
+        _allowResetCredits.Value=allowResetCredits;
+        try { await _queries.Schedule(key, linked.Token, supersede).ConfigureAwait(false); }
+        finally { _allowResetCredits.Value=false; }
     }
     private async Task RefreshCoreAsync(string key, CancellationToken cancellation)
     {
+        var allowResetCredits=_allowResetCredits.Value;
         await _querySlots.WaitAsync(cancellation).ConfigureAwait(false);
         AccountProfile? profile = null;
         long revision = -1;
@@ -145,11 +153,14 @@ internal sealed class AccountService
             // Its access token is sufficient for a read-only usage request; never
             // start a second authenticated app-server with a copy of its refresh token.
             var activeAuth = CanonicalAuthExists() ? ReadCanonicalAuth() : null;
+            UsageSnapshot? usage = null;
             try
             {
                 // Routine usage reads never start another token-refreshing process.
                 var owned = SessionCredentialPolicy.IsDesktopOwned(key, profile.RequiresApply, activeAuth);
                 var activeUsage = await ActiveUsageClient.ReadAsync(owned ? activeAuth! : authJson, profile.AccountId, cancellation).ConfigureAwait(false);
+                _resetCredits.Observe(key,activeUsage);
+                var resetNeeded=allowResetCredits&&!owned&&_resetCredits.ShouldAttempt(key,activeUsage);
                 lock (Vault.SyncRoot)
                 {
                     if (!IsCurrentRevision(profile, revision)) return;
@@ -160,34 +171,59 @@ internal sealed class AccountService
                         Vault.Upsert(latest);
                     }
                     profile.Usage = activeUsage; profile.Error = null;
-                    var currentPlan = activeUsage.Buckets.FirstOrDefault(b => b.Id == "codex")?.Plan;
-                    if (!string.IsNullOrWhiteSpace(currentPlan)) profile.Plan = currentPlan;
                     UsageHistory.Record(profile, activeUsage); Vault.Save();
                 }
-                RefreshHealth.Succeeded(key,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-                return;
+                if(!resetNeeded){RefreshHealth.Succeeded(key,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());return;}
+                usage=activeUsage;
             }
             catch (SessionCredentialException error) when (error.Code == SessionCredentialPolicy.RefreshPending)
             {
                 if (SessionCredentialPolicy.IsDesktopOwned(key, profile.RequiresApply, CanonicalAuthExists() ? ReadCanonicalAuth() : null)) throw;
             }
-            RefreshHealth.Begin(key,authJson,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            var renewing=usage==null;
+            bool OwnsRegistration()
+            {
+                lock(Vault.SyncRoot)return IsCurrentRevision(profile,revision)&&profile.AuthJson==authJson&&
+                    !SessionCredentialPolicy.IsDesktopOwned(key,profile.RequiresApply,CanonicalAuthExists()?ReadCanonicalAuth():null);
+            }
+            if(!OwnsRegistration())return;
+            if(renewing)RefreshHealth.Begin(key,authJson,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
             await using var home = new RuntimeHome(Vault.DirectoryPath, authJson);
-            UsageSnapshot? usage = null;
             string? email = null, plan = null;
+            var committed=false;
             try
             {
+                if(!OwnsRegistration())return;
                 await using var rpc = await OpenAccountRpcAsync(home.Path, client, workspace, cancellation).ConfigureAwait(false);
-                var response = await InactiveUsageReader.RenewAsync(
-                    (method, parameters) => rpc.RequestAsync(method, parameters, cancellation),
-                    () => !SessionCredentialPolicy.IsDesktopOwned(key, profile.RequiresApply, CanonicalAuthExists() ? ReadCanonicalAuth() : null),
-                    profile.Email).ConfigureAwait(false);
-                usage = UsageSnapshot.Parse(response, profile.AccountId);
+                if(!OwnsRegistration())return;
+                if(renewing)
+                {
+                    var response=await InactiveUsageReader.RenewAsync(
+                        (method, parameters)=>rpc.RequestAsync(method,parameters,cancellation),OwnsRegistration,
+                        profile.Email,()=>rpc.RefreshFailureCode).ConfigureAwait(false);
+                    usage=UsageSnapshot.Parse(response,profile.AccountId);
+                }
+                else
+                {
+                    // Confirm the reset helper identity without forcing renewal.
+                    var identity=await rpc.RequestAsync("account/read",new{refreshToken=false},cancellation).ConfigureAwait(false);
+                    if(!identity.TryGetProperty("account",out var account)||JsonValue.String(account,"type")!="chatgpt"||
+                        !string.Equals(JsonValue.String(account,"email"),profile.Email,StringComparison.OrdinalIgnoreCase))
+                        throw new SessionCredentialException("usage_identity_mismatch");
+                }
+                if(allowResetCredits&&usage!=null)
+                {
+                    try{usage=await _resetCredits.ConsumeAsync(key,profile.AccountId,usage,
+                        (method,parameters)=>rpc.RequestAsync(method,parameters,cancellation),OwnsRegistration,cancellation).ConfigureAwait(false);}
+                    catch(OperationCanceledException) when(cancellation.IsCancellationRequested){throw;}
+                    catch(Exception){SessionCredentialPolicy.Diagnostics[key]="rate_limit_reset/retry";}
+                }
                 email = profile.Email; plan = profile.Plan;
             }
             catch(Exception error)
             {
-                RefreshHealth.Failed(key,authJson,error is SessionCredentialException e && e.Code==SessionCredentialPolicy.Reauthenticate,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+                if(renewing)RefreshHealth.Failed(key,authJson,error is SessionCredentialException e && e.Code==SessionCredentialPolicy.Reauthenticate,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),error);
+                else SessionCredentialPolicy.Diagnostics[key]="rate_limit_reset/"+(error is OperationCanceledException?"cancelled":"retry");
                 throw;
             }
             finally
@@ -195,30 +231,15 @@ internal sealed class AccountService
                 if (File.Exists(Path.Combine(home.Path, "auth.json")))
                 {
                     var refreshed = home.ReadAuth();
-                    if (AuthDocument.Parse(refreshed).Key != key) throw new InvalidOperationException("조회 중 로그인 계정이 변경됐습니다.");
                     if (client != null) await client.RequireFileAsync(cancellation, workspace).ConfigureAwait(false);
-                    lock (Vault.SyncRoot)
-                    {
-                        if (IsCurrentRevision(profile, revision))
-                        {
-                            if (refreshed != authJson)
-                            {
-                                var canonical = CanonicalAuthExists() ? ReadCanonicalAuth() : null;
-                                if (!profile.RequiresApply && canonical == authJson) SecureFiles.AtomicWriteText(AuthPath, refreshed);
-                                else if (!profile.RequiresApply && canonical != null && AuthDocument.Parse(canonical).Key == key) refreshed = canonical;
-                            }
-                            if (profile.AuthJson != refreshed) Vault.Upsert(refreshed);
-                            revision = profile.CredentialRevision;
-                        }
-                        // Even unchanged in-memory credentials may follow a failed save.
-                        Vault.Save();
-                    }
-                    home.CredentialsSaved();
+                    committed=ResetCreditCoordinator.CommitCredentials(Vault,profile,revision,authJson,refreshed,
+                        ()=>CanonicalAuthExists()?ReadCanonicalAuth():null,home);
+                    if(committed)revision=profile.CredentialRevision;
                 }
             }
             lock (Vault.SyncRoot)
             {
-                if (!IsCurrentRevision(profile, revision)) return;
+                if (!committed||!IsCurrentRevision(profile, revision)) return;
                 profile.Usage = usage; profile.Error = null;
                 if (usage != null) UsageHistory.Record(profile, usage);
                 if (!string.IsNullOrEmpty(email)) profile.Email = email;
@@ -235,6 +256,7 @@ internal sealed class AccountService
         finally { _querySlots.Release(); Changed?.Invoke(); }
     }
     private bool IsCurrentRevision(AccountProfile profile, long revision) => Vault.Data.Accounts.Contains(profile) && profile.CredentialRevision == revision;
+
     public async Task<AccountRegistration> AddAccountAsync(Action<Uri> openBrowser, CancellationToken cancellation)
     {
         if (!await _loginGate.WaitAsync(0, cancellation).ConfigureAwait(false)) throw new InvalidOperationException("이미 로그인 창이 열려 있습니다.");

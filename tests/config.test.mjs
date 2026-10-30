@@ -4,7 +4,8 @@ import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {validateAccounts,readAccountConfig} from '../config.mjs';
-import {initialState,EXAMPLE_EMAILS} from '../core.mjs';
+import {initialState} from '../core.mjs';
+const EXAMPLE_EMAILS=Array.from({length:4},(_,i)=>`account${i+1}@example.com`);
 
 test('configured addresses populate the four slots without embedded personal accounts',()=>{
   const accounts=['first@example.com','second@example.com','third@example.com','fourth@example.com'];

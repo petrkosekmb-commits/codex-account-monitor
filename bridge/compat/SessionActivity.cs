@@ -151,8 +151,6 @@ internal sealed class SessionActivityLedger
                     if (path.Length == 1 || path[1].ValueKind != JsonValueKind.Number)
                     { _entries[id] = entry with { Status = null }; return true; }
                     var turnIndex = path[1].GetInt32();
-                    if (path.Length == 2 && JsonValue.String(patch, "op") is "add" or "remove")
-                    { _entries[id] = entry with { Status = null }; return true; }
                     if (turnIndex < entry.LastTurnIndex) continue;
                     if (path.Length == 2 && JsonValue.String(patch, "op") == "remove")
                     { _entries[id] = entry with { Status = null }; return true; }
@@ -160,10 +158,8 @@ internal sealed class SessionActivityLedger
                     {
                         var turn = patch.GetProperty("value");
                         if (turn.ValueKind == JsonValueKind.Object)
-                            entry = entry with { LastTurnId = JsonValue.String(turn, "turnId"), LastTurnStatus = JsonValue.String(turn, "status"), LastTurnIndex = turnIndex, LastTurnStartedAtMs = JsonValue.Long(turn, "turnStartedAtMs") };
+                            entry = entry with { LastTurnId = JsonValue.String(turn, "turnId"), LastTurnStatus = JsonValue.String(turn, "status"), LastTurnIndex = turnIndex };
                     }
-                    else if (path.Length == 3 && path[2].ValueKind == JsonValueKind.String && path[2].GetString() == "turnStartedAtMs")
-                        entry = entry with { LastTurnStartedAtMs = JsonValue.String(patch, "op") == "remove" ? null : JsonValue.Long(patch, "value"), LastTurnIndex = turnIndex };
                     else if (path.Length == 3 && JsonValue.String(patch, "op") != "remove" && path[2].ValueKind == JsonValueKind.String)
                     {
                         var field = path[2].GetString(); var turnValue = JsonValue.String(patch, "value");

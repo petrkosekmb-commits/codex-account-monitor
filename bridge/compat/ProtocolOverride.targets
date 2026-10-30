@@ -1,14 +1,14 @@
 <Project>
   <Target Name="UseLocalSessionActivity" BeforeTargets="CoreCompile" Condition="'$(MSBuildProjectName)' == 'CodexSwitch.Protocol'">
     <ItemGroup>
-      <Compile Remove="SessionActivity.cs;$(MSBuildProjectDirectory)/SessionActivity.cs" />
-      <Compile Include="$(MSBuildThisFileDirectory)SessionActivity.cs" />
+      <Compile Remove="SessionActivity.cs;$(MSBuildProjectDirectory)/SessionActivity.cs;CodexRpc.cs;$(MSBuildProjectDirectory)/CodexRpc.cs" />
+      <Compile Include="$(MSBuildThisFileDirectory)SessionActivity.cs;$(MSBuildThisFileDirectory)CodexRpc.cs;$(MSBuildThisFileDirectory)RefreshFailureEvidence.cs" />
     </ItemGroup>
   </Target>
   <Target Name="UseLocalCredentialOwnership" BeforeTargets="CoreCompile" Condition="'$(MSBuildProjectName)' == 'CodexSwitch.Application'">
     <ItemGroup>
       <Compile Remove="AccountService.cs;$(MSBuildProjectDirectory)/AccountService.cs;Runtime.cs;$(MSBuildProjectDirectory)/Runtime.cs" />
-      <Compile Include="$(MSBuildThisFileDirectory)AccountService.cs;$(MSBuildThisFileDirectory)SessionCredentialPolicy.cs;$(MSBuildThisFileDirectory)ActiveUsageClient.cs;$(MSBuildThisFileDirectory)InactiveUsageReader.cs;$(MSBuildThisFileDirectory)Runtime.cs" />
+      <Compile Include="$(MSBuildThisFileDirectory)AccountService.cs;$(MSBuildThisFileDirectory)SessionCredentialPolicy.cs;$(MSBuildThisFileDirectory)ResetCreditPolicy.cs;$(MSBuildThisFileDirectory)ResetCreditCoordinator.cs;$(MSBuildThisFileDirectory)ActiveUsageClient.cs;$(MSBuildThisFileDirectory)InactiveUsageReader.cs;$(MSBuildThisFileDirectory)Runtime.cs" />
     </ItemGroup>
   </Target>
   <Target Name="UseLocalWindowsProcessInspection" BeforeTargets="CoreCompile" Condition="'$(MSBuildProjectName)' == 'CodexSwitch.DesktopClient'">

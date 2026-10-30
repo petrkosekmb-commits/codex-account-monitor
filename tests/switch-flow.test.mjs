@@ -52,7 +52,7 @@ test('temporary history snapshot gap recovers without resending continuation',as
 });
 test('permanently missing snapshot remains unverified',async()=>{
  let calls=0;const state={};const result=await runSwitch({state,id:4,threadId:'chat',save:async()=>{},wait:async()=>{},apply:()=>{},request:async()=>({threads:++calls===1?[{id:'chat',lastTurnId:'new',lastTurnStatus:'inProgress',status:'active'}]:[]})});
- assert.equal(result.ok,false);assert.match(state.lastSwitch.error,/není dostupný/);assert.ok(calls<=6);
+ assert.equal(result.ok,false);assert.match(state.lastSwitch.error,/není dostupný/);assert.ok(calls<=33);assert.equal(state.lastSwitch.errorCode,'snapshot_missing');
 });
 test('actual changed turn remains rejected',async()=>{
  let calls=0;const state={};const result=await runSwitch({state,id:4,threadId:'chat',save:async()=>{},wait:async()=>{},apply:()=>{},request:async()=>({threads:[{id:'chat',lastTurnId:++calls===1?'new':'other',lastTurnStatus:'inProgress',status:'active'}]})});
@@ -85,5 +85,32 @@ test('permanently missing first snapshot is bounded and never resends',async()=>
   calls.push(method);return {threads:[]};
  }});
  assert.equal(result.ok,false);assert.match(state.lastSwitch.error,/není doložené/);
- assert.equal(calls.filter(method=>method==='switch').length,1);assert.equal(calls.length,8);
+ assert.equal(calls.filter(method=>method==='switch').length,1);assert.equal(calls.length,32);
+});
+
+test('a 12-second history gap recovers without duplicate continuation',async()=>{
+ const state={};let reads=0,sends=0;
+ const result=await runSwitch({state,id:2,threadId:'chat',beforeTurnId:'old',save:async()=>{},wait:async()=>{},apply:()=>{},request:async method=>{
+  if(method==='switch')sends++;else reads++;
+  return {threads:reads>0&&reads<=12?[]:[{id:'chat',lastTurnId:'new',lastTurnStatus:reads>12?'completed':'inProgress',status:reads>12?'idle':'active'}]};
+ }});
+ assert.equal(result.ok,true);assert.equal(sends,1);assert.equal(state.lastSwitch.confirmedTurnId,'new');assert.equal(state.lastSwitch.continuationStatus,'completed');
+});
+
+test('snapshot gap budget is shared between first and subsequent gaps',async()=>{
+ const state={};let reads=0;let slept=0;
+ const result=await runSwitch({state,id:2,threadId:'chat',save:async()=>{},wait:async ms=>{slept+=ms;},apply:()=>{},request:async method=>{
+  if(method==='status')reads++;
+  return {threads:reads===20?[{id:'chat',lastTurnId:'new',lastTurnStatus:'inProgress',status:'active'}]:[]};
+ }});
+ assert.equal(result.ok,false);assert.equal(slept,35000);assert.equal(state.lastSwitch.errorCode,'snapshot_missing');
+});
+
+for(const reason of ['account','approval'])test(`a later ${reason} change prevents confirmation`,async()=>{
+ const state={};let reads=0,sends=0;
+ const result=await runSwitch({state,id:2,threadId:'chat',expectedEmail:'target@example.com',save:async()=>{},wait:async()=>{},apply:()=>{},request:async method=>{
+  if(method==='switch')sends++;else reads++;
+  return {accounts:[{current:true,email:reads&&reason==='account'?'other@example.com':'target@example.com'}],threads:[{id:'chat',lastTurnId:'new',lastTurnStatus:reads?'completed':'inProgress',status:reads?'idle':'active',waiting:reads>0&&reason==='approval'}]};
+ }});
+ assert.equal(result.ok,false);assert.equal(sends,1);assert.equal(state.lastSwitch.errorCode,reason==='account'?'account_unconfirmed':'approval_pending');
 });

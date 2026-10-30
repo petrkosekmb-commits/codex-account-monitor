@@ -8,6 +8,7 @@ $monitorNode=Join-Path $env:USERPROFILE '.cache\codex-runtimes\codex-primary-run
 if(-not(Test-Path -LiteralPath $monitorNode)){$monitorNode=(Get-Command node -ErrorAction Stop).Source}
 New-Item -ItemType Directory -Path $monitorData -Force|Out-Null
 $monitorApp=Join-Path $monitorRoot 'app.mjs'
+$monitorLastExit=$null
 for($monitorAttempt=0;$monitorAttempt -le 3;$monitorAttempt++){
     $monitorProcess=$null
     $adopted=$false
@@ -33,10 +34,11 @@ for($monitorAttempt=0;$monitorAttempt -le 3;$monitorAttempt++){
         $start.ArgumentList.Add($monitorApp)
         $monitorProcess=[Diagnostics.Process]::Start($start)
     }
-    [IO.File]::WriteAllText((Join-Path $monitorData 'host-status.json'),(@{watchingPid=$monitorProcess.Id;hostPid=$PID;adopted=$adopted;retry=$monitorAttempt;at=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()}|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText((Join-Path $monitorData 'host-status.json'),(@{watchingPid=$monitorProcess.Id;hostPid=$PID;adopted=$adopted;retry=$monitorAttempt;lastExitCode=$monitorLastExit;at=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()}|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
     $monitorProcess.WaitForExit()
     $monitorProcess.Refresh()
     $monitorExit=if($adopted){1}else{$monitorProcess.ExitCode}
+    $monitorLastExit=$monitorExit
     [IO.File]::WriteAllText((Join-Path $monitorData 'host-status.json'),(@{lastExitCode=$monitorExit;hostPid=$PID;retry=$monitorAttempt;at=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()}|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
     $monitorProcess.Dispose()
     if($monitorExit -eq 0){exit 0}

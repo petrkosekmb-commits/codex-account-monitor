@@ -9,7 +9,7 @@ $hostScript=Join-Path $PSScriptRoot 'run-monitor-host.ps1'
 $resolvedData=[IO.Path]::GetFullPath($DataPath)
 if ($resolvedData -match '["\r\n]') { throw 'Invalid data directory.' }
 $existingTask=Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-if ($existingTask -and @($existingTask.Actions | Where-Object { $_.Arguments -like ('*'+[WildcardPattern]::Escape($hostScript)+'*') }).Count -ne 1) { throw 'Task name belongs to a different program.' }
+if ($existingTask -and @($existingTask.Actions | Where-Object { $_.Arguments -like ('*'+$hostScript+'*') }).Count -ne 1) { throw 'Task name belongs to a different program.' }
 $shellPath=Join-Path $env:USERPROFILE '.cache\codex-runtimes\codex-primary-runtime\dependencies\native\powershell\pwsh.exe'
 if (-not (Test-Path -LiteralPath $shellPath)) { $shellPath=(Get-Command pwsh -ErrorAction Stop).Source }
 $userName=[Security.Principal.WindowsIdentity]::GetCurrent().Name

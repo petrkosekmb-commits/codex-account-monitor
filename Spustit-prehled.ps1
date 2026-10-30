@@ -1,18 +1,13 @@
 param([switch]$BezOtevreni)
-if(-not(Test-Path -LiteralPath (Join-Path $PSScriptRoot 'bridge\publish\CodexSwitch.exe'))){throw 'Chybi sestaveny pomocnik. Nejdriv spustte bridge\Build.ps1. / Build the helper first.'}
-
 $ErrorActionPreference = 'Stop'
-$dataPath = if ($env:ACCOUNT_MONITOR_DATA) { [IO.Path]::GetFullPath($env:ACCOUNT_MONITOR_DATA) } else { Join-Path $env:LOCALAPPDATA 'CodexAccountMonitor' }
-if ($dataPath -match '["\r\n]') { throw 'Invalid data directory.' }
-$monitorPort = if ($env:ACCOUNT_MONITOR_PORT) { [int]$env:ACCOUNT_MONITOR_PORT } else { 55163 }
-if ($monitorPort -lt 1024 -or $monitorPort -gt 65535) { throw 'Invalid port.' }
-if (-not (Test-Path -LiteralPath (Join-Path $dataPath 'accounts.json'))) { throw 'Create local accounts.json first; see README.' }
+if(-not(Test-Path -LiteralPath (Join-Path $PSScriptRoot 'bridge\publish\CodexSwitch.exe'))){throw 'Chybi pomocnik prepinani. Nejdriv spustte bridge\Build.ps1 nebo pouzijte kompletni Windows balicek.'}
+$dataPath = Join-Path $env:USERPROFILE 'Codex\account-monitor'
 $runtimePath = Join-Path $dataPath 'runtime.json'
 $nodePath = Join-Path $env:USERPROFILE '.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe'
 if (-not (Test-Path -LiteralPath $nodePath)) { $nodePath = (Get-Command node -ErrorAction Stop).Source }
 New-Item -ItemType Directory -Path $dataPath -Force | Out-Null
-$taskName = 'Codex Account Monitor - manual public'
-& (Join-Path $PSScriptRoot 'scripts\register-monitor-task.ps1') -TaskName $taskName -DataPath $dataPath -Port $monitorPort
+$taskName = 'Codex - prehled uctu (rucni)'
+& (Join-Path $PSScriptRoot 'scripts\register-monitor-task.ps1') -TaskName $taskName -DataPath $dataPath -Port 55163
 $monitorRunning = $false
 if (Test-Path -LiteralPath $runtimePath) {
     try {

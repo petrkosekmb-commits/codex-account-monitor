@@ -1,45 +1,3 @@
-# Ověření 0.2.13 / Verification
-
-26. října 2026 prošlo všech 73 testů Node veřejné distribuce, sestavení obou variant pomocníka, 24 protokolových kontrol a regrese přihlášení včetně 12 nových kontrol potvrzení. Kontrola distribuovaných souborů prošla bez osobních adres, osobních cest a vzorů tajných údajů. Místní nasazení ověřilo 219 souborů a verzi pomocníka 0.2.13.0. Zachovalo aktuální účet i původní neuzavřený přechod; automatika zůstala vypnutá.
-
-On 26 October 2026, all 73 public-distribution Node tests, both helper builds, 24 protocol checks and credential regressions including 12 new receipt checks passed. Distribution scans found no personal addresses, personal paths or credential patterns. Local deployment verified 219 files and helper version 0.2.13.0, preserving the active account and the unresolved previous transition. Automation remained disabled.
-
-Přibylo 12 kontrol potvrzení pokračování: shoda konkrétní zprávy, odmítnutí ručního či starého tahu, chyby a čekajícího schválení, změna účtu, obnovení potvrzení po ztracené odpovědi bez druhého odeslání, omezený počet čtení, oba podporované formáty odpovědi, interní timeout a výslovné zrušení. Tyto kontroly simulují možné selhání potvrzení; nejsou důkazem přesné prvotní příčiny konkrétního provozního incidentu. Nová verze nezaručuje obnovení zrušených tokenů ani automatické uzavření starých nejasných přechodů.
-
-Twelve continuation checks cover exact message correlation, rejection of unrelated/manual or old turns, failures and approval waits, account changes, lost-reply recovery without a second send, bounded reads, both supported reply shapes, transport timeout and explicit cancellation. These simulate receipt failures; they do not establish the exact original cause of a particular production incident. This version does not guarantee recovery of revoked tokens or automatic settlement of old uncertain transitions. No live handoff on 0.2.13 is claimed.
-
----
-# Ověření 0.2.12 / Verification
-
-Veřejný balíček 0.2.12: všech 73 testů Node prošlo, včetně kontroly distribučního seznamu, příkladových adres a vzorů tajných údajů. Sestavení pomocníka, 24 protokolových kontrol i regrese obnovy a ukládání přihlášení prošly. Izolované testy obsahují nový modul historie; test hostitele čeká na zveřejnění výsledku ukončení procesu, nikoli pouze na vznik druhého procesu.
-
-Public package 0.2.12: all 73 Node tests passed, including distribution, example-identity and secret-pattern checks. Helper build, 24 protocol checks and credential recovery/persistence regressions passed. Isolated fixtures include the new health module; the host test waits for the published exit result instead of racing the second process startup.
-
-26. října 2026: místní verze 0.2.12 byla nasazena s ověřením 217 kontrolních součtů. Restart zachoval přihlášení všech čtyř účtů, aktivní identitu i historii. Předchozí sledování verze 0.2.11 pokrylo téměř deset hodin a přes 1 290 úspěšných kontrol na každý účet. Tři účty neměly zaznamenanou chybu; jeden měl přechodný výpadek, po kterém následovalo úspěšné ověření za přibližně 30 sekund. V historii nebyl zaznamenán požadavek na nové přihlášení.
-
-Na verzi 0.2.11 bylo před nasazením poslední opravy pozorováno skutečné dokončené přepnutí s pokračováním chatu. Verze 0.2.12 navíc opravuje předčasné odmítnutí chybějícího prvního snímku. Nové regrese ověřují chybějící snímek, přechod přes starý tah a omezený počet čtení bez druhého odeslání. Nový živý přechod na verzi 0.2.12 nebyl vyvoláván. Skutečná expirace tokenu, týdenní stabilita a všechny podmínky bezobslužného provozu zůstávají neověřené.
-
-On 26 October 2026, local version 0.2.12 was deployed with 217 file hashes verified. Restart preserved all four sign-ins, the active identity and health history. Earlier observation on 0.2.11 covered nearly ten hours and over 1,290 successful checks per account. Three accounts had no recorded errors; one recovered from a transient failure within approximately 30 seconds. No reauthentication transition was recorded.
-
-A completed live handoff with chat continuation was observed on 0.2.11 before this final patch. Version 0.2.12 additionally tolerates a missing first snapshot with bounded reads and no duplicate continuation. A new live handoff was not induced on 0.2.12. Actual token expiration, week-long stability and every unattended scenario remain unverified. No personal identities or production logs are included in this distribution.
-
----
-# Ověření 0.2.10 / Verification
-
-Dne 25. října 2026 místní opravená instalace úspěšně dokončila skutečný ruční přechod a řízený automatický přechod mezi dvěma účty. Ověřena cílová identita, opětovné otevření desktopu, stejný chat, nový běžící tah, právě jeden požadavek a odstranění nedokončeného přechodu. Kontrola pokračování sledovala běh přibližně 90 sekund. Automatický test použil pouze syntetický signál vyčerpání v paměti, nikoli změnu skutečných limitů.
-
-Dřívější neúspěšné pokusy nejsou označeny jako úspěch. Odhalily chybu čtení modulů procesu a příliš přísné odmítnutí dočasně nedostupného snímku. Obě opravy mají regresní ověření. Poslední výzva k novému přihlášení byla rozpracovaná přihlašovací operace; původní relace prošla další kontrolou bez nového přihlášení. To nevysvětluje všechny historické případy zrušení tokenu.
-
-On 25 October 2026 the local repaired installation completed manual and controlled automatic handoffs, checking target identity, desktop reopening, the same chat, one new running continuation and cleared pending state. Verification observed continuation for approximately 90 seconds. Automatic triggering used an in-memory synthetic exhaustion signal. Long-term login stability and natural exhaustion are not proven. Earlier failed attempts remain failures; production logs, personal identities and credentials are excluded from this repository.
-
----
-# Ověření 0.2.9 / Verification
-
-Místní opravená instalace prošla přepnutím mezi dvěma účty a zpět (přibližně 48 a 56 sekund). Oba přechody zachovaly název chatu, každý vyvolal právě jedno pokračování, nezůstal nedokončený přechod a nastavení automatiky bylo obnoveno. Syntetické vyčerpání na kopii živého stavu vybralo vhodný účet a aktuální chat bez změny provozních limitů. Toto není živý test skutečného vyčerpání.
-
-The locally repaired installation completed a round trip between two accounts in approximately 48 and 56 seconds. Each leg preserved the chat title, continued exactly once, cleared the pending transition and restored automation settings. A synthetic exhaustion decision used an in-memory copy and left real limits untouched. This does not establish behavior at real quota exhaustion.
-
-Neověřeno / Not verified: dlouhodobá obnova přihlášení, skutečná expirace, všechny body pádu při rotaci tokenů, všechny budoucí dodatečné limity a plně bezobslužný provoz. Public a private zdrojové balíčky používají odlišné výchozí datové cesty; nejsou určeny k souběžnému běhu nad stejným profilem.
 # Ověření opravy 0.2.7
 
 Živá kontrola našla přechod zastavený ve fázi BackingUp bez změny účtu a bez odeslání pokračování. Vybraný chat měl prázdné pole name v thread/read, ale platný název v zachyceném stavu desktopu. Pomocník nyní zachovává tento název bez přejmenování. Chybějí-li oba názvy, přechod se stále zastaví před změnou účtu. Automatika ukazuje konkrétní fázi nedokončeného přechodu.
@@ -54,15 +12,10 @@ Prošlo všech 46 testů soukromé edice, 48 testů veřejné edice a 20 regresn
 
 # Dřívější ověření verze 0.2.5
 
-Prošlo 43 testů Node a 20 kontrol pomocníka .NET (soukromé edici 37 úplných testů před přidáním předplatného a následně všech 7 testů dashboardu). Kontroly zahrnují autentizaci místního HTTP rozhraní, izolaci konfigurace, výpadek procesu, částečné přepnutí, nejasné odeslání, čekající schválení, odpočet a předplatné. Veřejný distribuční seznam používá pouze adresy example.com a prošel kontrolou citlivých vzorů.
+Prošlo 38 testů Node a 20 kontrol pomocníka .NET (soukromé edici 37 úplných testů před přidáním předplatného a následně všech 7 testů dashboardu). Kontroly zahrnují autentizaci místního HTTP rozhraní, izolaci konfigurace, výpadek procesu, částečné přepnutí, nejasné odeslání, čekající schválení, odpočet a předplatné. Veřejný distribuční seznam používá pouze adresy example.com a prošel kontrolou citlivých vzorů.
 
 Živě byl ověřen přechod mezi dvěma funkčními účty: identita, zachovaný název, nové pokračování, vyčištění přechodu a přežití monitoru. Návrat původně uvázl při obnově druhého chatu; po doplnění nového zjištění spojení byl připravený přechod dokončen. Další pozorovaný přechod opět zachoval hostitele i pokračování.
 
 Záznam posledního přechodu nedokazuje spouštěč automatického vyčerpání: snímek zdroje obsahoval 98 procent a záznam pokusů automatiky byl prázdný. Úplný test tohoto spouštěče je otevřený. Některá přihlášení hlásila chybu služby a uživatel požádal pokračovat bez jejich obnovy. Starší test 12 směrů patřil předchozí verzi a není důkazem opravy nového selhání.
 
 Kruhový odpočet a platnost předplatného byly zkontrolovány také v místním rozhraní. Údaj o platnosti pochází z posledního přihlášení; datum další platby není ověřené. Soukromé údaje ani živé testovací záznamy nejsou součástí distribuce.
-Distribuce 0.2.9: všech 55 testů Node prošlo v každé edici, včetně kontroly distribučního seznamu. / All 55 Node tests passed in each edition, including the distribution allowlist check.
-
-Distribuce 0.2.9: 55 testů Node v každé edici, sestavení obou pomocníků a protokolové i přihlašovací regrese prošly. / Both editions passed 55 Node tests, helper builds and protocol/credential regression suites.
-
-Veřejná varianta 0.2.10: 64 testů Node, sestavení pomocníka, protokolové regrese a regrese přihlášení prošly. Distribuční seznam prošel kontrolou osobních adres a vzorů tajných údajů. / Public variant: all 64 Node tests, helper build, protocol and credential regression suites passed; distribution privacy checks passed.

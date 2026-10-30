@@ -17,7 +17,7 @@ test('Windows host restarts failed Node while its independent descendant is stil
   try{
     let entries=[],status;
     for(let n=0;n<100;n++){
-      try{entries=(await readFile(join(data,'pids.jsonl'),'utf8')).trim().split('\n').map(JSON.parse);status=JSON.parse(await readFile(join(data,'host-status.json'),'utf8'));if(entries.length>=2&&status.lastExitCode!==undefined)break;}catch{}
+      try{entries=(await readFile(join(data,'pids.jsonl'),'utf8')).trim().split('\n').map(JSON.parse);status=JSON.parse(await readFile(join(data,'host-status.json'),'utf8'));if(entries.length>=2)break;}catch{}
       await pause(100);
     }
     assert.ok(entries.length>=2,'failed monitor must restart without waiting for its descendant');

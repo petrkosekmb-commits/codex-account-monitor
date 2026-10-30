@@ -83,42 +83,29 @@ internal static class Program
         Vault=new AccountVault(Path.GetFullPath(args[0]));Service=new AccountService(Vault,Path.GetFullPath(args[1]));
         Sessions=new DesktopSessionMonitor(Path.GetFullPath(args[1]));Sessions.Start();
         var recheck=RecheckWaitingAsync();
-        var handlers=new List<Task>();
         string? line;
         while((line=await Console.In.ReadLineAsync())!=null)
         {
-            try {
-                using var document=JsonDocument.Parse(line);
-                var msg=document.RootElement.Clone();
-                foreach(var completed in handlers.Where(task=>task.IsCompleted).ToArray()) { await completed; handlers.Remove(completed); }
-                handlers.Add(Handle(msg));
-            }
+            try {var msg=JsonDocument.Parse(line).RootElement.Clone();_ = Handle(msg);}
             catch {Send(new {error="Neplatný požadavek."});}
         }
-        MonitorStop.Cancel();Operation?.Cancel();
-        await Task.WhenAll(handlers.Append(recheck));
-        await Service.StopAsync();await Sessions.DisposeAsync();Service.ReleaseDesktop();return 0;
+        MonitorStop.Cancel();Operation?.Cancel();await recheck;await Service.StopAsync();await Sessions.DisposeAsync();Service.ReleaseDesktop();return 0;
     }
     private static async Task Handle(JsonElement msg)
     {
-        int id=0; string? method;
-        if(msg.ValueKind!=JsonValueKind.Object || !msg.TryGetProperty("id",out var requestId)
-            || requestId.ValueKind!=JsonValueKind.Number || !requestId.TryGetInt32(out id)
-            || !msg.TryGetProperty("method",out var requestMethod) || requestMethod.ValueKind!=JsonValueKind.String
-            || string.IsNullOrWhiteSpace(method=requestMethod.GetString()))
-        { Send(new {id,error="Neplatný požadavek."});return; }
-        if(method=="status"){
-            try {Send(new {id,result=Status()});}
-            catch {Send(new {id,error="Stav pomocníka není dostupný."});}
-            return;
-        }
+        var id=msg.GetProperty("id").GetInt32();var method=msg.GetProperty("method").GetString();
+        if(method=="status"){Send(new {id,result=Status()});return;}
         if(method=="cancel"){Operation?.Cancel();Send(new{id,result=new{cancelRequested=true}});return;}
         if(!await Gate.WaitAsync(0)){Send(new{id,error="Probíhá jiné přihlášení, kontrola nebo přepnutí."});return;}
         try
         {
             Operation=new CancellationTokenSource(TimeSpan.FromMinutes(method=="login"?15:10));var ct=Operation.Token;
             if(!Ready){await Service.InitializeAsync(ct);Ready=true;}
-            if(method=="initialize"||method=="refresh"){await Service.SynchronizeCurrentAsync(ct);await Task.WhenAll(Service.Accounts.Where(a=>AllowedEmail(a.Email)).Select(a=>Service.RefreshAccountAsync(a.Key,ct)));}
+            if(method=="initialize"||method=="refresh"){
+                var allowResets=method=="refresh"&&msg.TryGetProperty("allowResetCredits",out var resetFlag)&&resetFlag.ValueKind==JsonValueKind.True;
+                await Service.SynchronizeCurrentAsync(ct);
+                await Task.WhenAll(Service.Accounts.Where(a=>AllowedEmail(a.Email)).Select(a=>Service.RefreshAccountAsync(a.Key,ct,allowResetCredits:allowResets)));
+            }
             else if(method=="dismiss")
             {
                 var pending=Vault.Data.PendingSwitch;
@@ -215,16 +202,15 @@ internal sealed class PreservingBackend:IAccountSwitchBackend
     public async Task<SwitchChat[]> CaptureAsync(CancellationToken c)
     {
         await Sessions.WaitForDiscoveryAsync(c);
-        var chats=OperatingSystem.IsWindows() ? Sessions.Threads.Where(t=>t.Status=="active").Select(t=>new SwitchChat{Id=t.Id,OriginalTitle=t.Title??"",OriginalTurnId=t.LastTurnId,OriginalGoal=t.Goal}).ToList() : (await Backend.CaptureAsync(c)).ToList();
-        if(chats.Any(t=>Selected==null||t.Id!=Selected))
-            throw new InvalidOperationException("Přepnutí by zasáhlo jiný rozpracovaný chat. Nejdřív jej dokonči.");
-        if(Selected!=null)
-        {
-            var thread=Sessions.Threads.Single(t=>t.Id==Selected);
-            if(thread.Waiting)throw new InvalidOperationException();
-            if(thread.LastTurnStatus=="completed"&&thread.Goal!="active")throw new InvalidOperationException();
-            if(!chats.Any(t=>t.Id==Selected))chats.Add(new(){Id=thread.Id,OriginalTitle=thread.Title??"",OriginalTurnId=thread.LastTurnId,OriginalGoal=thread.Goal});
-        }
+        // Recheck the resolved task before closing the desktop. Missing discovery
+        // is never permission to resume a different chat or all known chats.
+        var discovered=Sessions.Threads;
+        if(Selected==null)throw new InvalidOperationException("Rozpracovaný chat není ověřený.");
+        if(discovered.Any(t=>t.Waiting))throw new InvalidOperationException("Chat čeká na schválení nebo odpověď.");
+        if(discovered.Any(t=>t.Id!=Selected&&(t.Status=="active"||t.LastTurnStatus=="inProgress")))throw new InvalidOperationException("Současně běží jiný chat; přepnutí počká.");
+        var candidates=discovered.Where(t=>t.Id==Selected).ToArray();
+        if(candidates.Any(t=>t.Status!="active"&&t.LastTurnStatus=="completed"&&t.Goal is not ("active" or "usageLimited")))throw new InvalidOperationException("Chat už byl dokončen; automatické pokračování není potřeba.");
+        var chats=candidates.Select(t=>new SwitchChat{Id=t.Id,OriginalTitle=t.Title??"",OriginalTurnId=t.LastTurnId,OriginalGoal=t.Goal}).ToList();
         if(chats.Count==0)throw new InvalidOperationException("Nebyla nalezena rozpracovaná úloha.");
         return chats.OrderBy(t=>t.Id==Selected?0:1).ToArray();
     }
@@ -256,14 +242,14 @@ internal sealed class PreservingBackend:IAccountSwitchBackend
     {
         if(!OperatingSystem.IsWindows())return await Backend.ResumeAsync(chat,sending,c);
         if(await CurrentAccountAsync(c)!=Target)throw new InvalidOperationException("Aktivní účet se změnil.");
-        var thread=Sessions.Threads.FirstOrDefault(t=>t.Id==chat.Id&&t.ResumeState=="resumed"&&t.Status is "idle" or "active");
+        var thread=Sessions.Threads.FirstOrDefault(t=>t.Id==chat.Id);
         if(thread==null)Process.Start(DesktopLaunch.Create(Service.Installation.DesktopPath,chat.Id))?.Dispose();
         var deadline=DateTimeOffset.UtcNow.AddMinutes(2);
         var rediscoverAt=DateTimeOffset.UtcNow.AddSeconds(15);
         while(thread==null&&DateTimeOffset.UtcNow<deadline)
         {
             await Task.Delay(200,c);
-            thread=Sessions.Threads.FirstOrDefault(t=>t.Id==chat.Id&&t.ResumeState=="resumed"&&t.Status is "idle" or "active");
+            thread=Sessions.Threads.FirstOrDefault(t=>t.Id==chat.Id);
             if(thread==null&&DateTimeOffset.UtcNow>=rediscoverAt)
             {
                 // Navigation may finish after the first discovery snapshot.

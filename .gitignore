@@ -13,23 +13,14 @@ bridge/bin/
 bridge/obj/
 bridge/publish/
 
-accounts.json
-accounts.local.json
-.env
-.env.*
-*.vault
-*.pfx
-*.pem
-bridge/tests/bin/
-bridge/tests/obj/
-artifacts/
-
 host-status.json
+
+accounts.json
+
+accounts.local.json
 
 backups/
 
-*.tmp
+*.vault
 
-bridge/credential-tests/bin/
-bridge/credential-tests/obj/
-account-monitor-owner.lock
+*.tmp

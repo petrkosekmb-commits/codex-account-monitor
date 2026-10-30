@@ -4,8 +4,7 @@ test('MCP nabízí jen přehled a kontrolu, bez nástroje pro přepínání nebo
   const lines=createInterface({input:child.stdout});const msgs=[];lines.on('line',l=>msgs.push(JSON.parse(l)));
   child.stdin.write(JSON.stringify({jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2024-11-05'}})+'\n');
   child.stdin.write(JSON.stringify({jsonrpc:'2.0',id:2,method:'tools/list'})+'\n');
-  let t,poll;
-  try{await new Promise((resolve,reject)=>{t=setTimeout(()=>reject(new Error('timeout')),5000);poll=setInterval(()=>{if(msgs.length===2){clearTimeout(t);clearInterval(poll);resolve();}},20);});
+  try{await new Promise((resolve,reject)=>{const t=setTimeout(()=>reject(new Error('timeout')),5000);const poll=setInterval(()=>{if(msgs.length===2){clearTimeout(t);clearInterval(poll);resolve();}},20);});
     assert.deepEqual(msgs.find(m=>m.id===2).result.tools.map(t=>t.name),['account_overview','refresh_limits']);
-  }finally{clearTimeout(t);clearInterval(poll);child.kill();lines.close();}
+  }finally{child.kill();lines.close();}
 });
