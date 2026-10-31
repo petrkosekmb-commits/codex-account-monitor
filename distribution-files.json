@@ -79,5 +79,8 @@
   "automation-history.mjs",
   "scripts/test-live.mjs",
   "tests/automation-history.test.mjs",
-  "tests/current-chat.test.mjs"
+  "tests/current-chat.test.mjs",
+  "scripts/test-browser-switch.cjs",
+  "bridge/SwitchPreparation.cs",
+  "bridge/credential-tests/PreparationRegression.cs"
 ]

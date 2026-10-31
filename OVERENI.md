@@ -1,3 +1,15 @@
+## Oprava pripravy chatu bez nazvu / unnamed chat preparation
+
+CZ: Opraveno selhani SwitchTitle.Stamp pred zmenou uctu. Prepinani zachova presny overeny identifikator chatu a puvodni nazev, vcetne chybejiciho nazvu. Nazev se neopatruje datem ani nemení. Blokace nejednoznacne ulohy a cekajiciho schvaleni zustavaji. Regrese pouziva synteticky backend; skutecne predani touto verzi zatim neni overene.
+
+EN: Fixed SwitchTitle.Stamp failure before account application. Preparation preserves the verified thread ID and original title, including absent titles, without timestamping or renaming. Ambiguous work and pending approvals remain blocked. Regression coverage uses a synthetic backend; a live handoff with this version is not yet verified.
+
+# Overeni 0.2.20
+
+Reprodukce v Edge pred opravou: obnova mezi pointerdown a pointerup zpusobila 0 pozadavku. Po oprave stejny test odesle prave 1 pozadavek. Regrese navic overuje klavesnici, pointercancel, blokaci duplicitniho kliknuti a zachovani chyb po obnoveni. scripts/test-browser-switch.cjs vyzaduje Playwright a Edge; vsechny HTTP pozadavky nahrazuje syntetickym API a neprepina skutecne ucty. Spusteni: node scripts/test-browser-switch.cjs.
+
+Toto vydani nema novy zivy test zmeny identity a pokracovani. Opravuje ztracene kliknuti; neprokazuje trvalost prihlaseni ani nerusi ochranu nejednoznacne rozpracovane ulohy.
+
 # Ověření opravy 0.2.7
 
 Živá kontrola našla přechod zastavený ve fázi BackingUp bez změny účtu a bez odeslání pokračování. Vybraný chat měl prázdné pole name v thread/read, ale platný název v zachyceném stavu desktopu. Pomocník nyní zachovává tento název bez přejmenování. Chybějí-li oba názvy, přechod se stále zastaví před změnou účtu. Automatika ukazuje konkrétní fázi nedokončeného přechodu.

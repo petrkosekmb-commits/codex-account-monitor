@@ -5,14 +5,41 @@ import vm from 'node:vm';
 
 const script=readFileSync(new URL('../index.html',import.meta.url),'utf8').split('<script>')[1].split('</script>')[0];
 function dashboard(waiting=false){
-  const elements=new Map(),buttons=[{dataset:{switch:'3'}}];
+  const elements=new Map(),buttons=[{dataset:{switch:'3'}}],listeners={};
   const element=id=>{if(!elements.has(id))elements.set(id,{innerHTML:'',textContent:'',style:{},insertAdjacentHTML(_,s){this.innerHTML+=s;},scrollIntoView(){}});return elements.get(id);};
   const state={available:[3],slots:[{id:3,email:'target@example.com',connected:true,history:[],availability:{status:'available',label:'Dostupný'}}],activeEmail:'source@example.com',continuation:waiting?{reason:'Chat čeká na schválení nebo odpověď.'}:{threadId:'00000000-0000-0000-0000-000000000001',title:'Rozpracovaný chat',reason:''},switcher:{ready:true,desktop:true,threads:[{id:'00000000-0000-0000-0000-000000000001',title:'Čekající chat',status:'active',waiting}]}};
   const calls=[];
-  const context=vm.createContext({Intl,Date,document:{getElementById:element,querySelectorAll:s=>s.includes('data-switch')?buttons:[]},setInterval(){},fetch:async(url,options)=>{calls.push({url,options});return url==='/api/state'?{ok:true,json:async()=>state}:{ok:false,json:async()=>({error:'Ověřovací chyba'})};}});
+  const context=vm.createContext({Intl,Date,setTimeout,document:{addEventListener:(type,fn)=>listeners[type]=fn,getElementById:element,querySelectorAll:s=>s.includes('data-switch')?buttons:[]},setInterval(){},fetch:async(url,options)=>{calls.push({url,options});return url==='/api/state'?{ok:true,json:async()=>state}:{ok:false,json:async()=>({error:'Ověřovací chyba'})};}});
   vm.runInContext(script,context);
-  return {context,elements,buttons,calls,ready:()=>vm.runInContext('update()',context)};
+  return {context,elements,buttons,calls,listeners,ready:()=>vm.runInContext('update()',context)};
 }
+
+test('polling defers DOM replacement until pointer or keyboard activation ends',async()=>{
+ for(const [start,end,event] of [['pointerdown','pointerup',{}],['pointerdown','pointercancel',{}],['keydown','keyup',{key:' '}]]){
+  const d=dashboard();await d.ready();const before=d.elements.get('cards').innerHTML;
+  d.listeners[start](event);
+  vm.runInContext("state.slots[0].email='changed@example.com';draw()",d.context);
+  assert.equal(d.elements.get('cards').innerHTML,before);
+  d.listeners[end](event);await new Promise(r=>setTimeout(r,5));
+  assert.match(d.elements.get('cards').innerHTML,/changed@example.com/);
+ }
+});
+
+test('pending manual request survives polling and rejects a second click',async()=>{
+ const d=dashboard();await d.ready();const original=d.context.fetch;let release,posts=0;
+ d.context.fetch=async(url,options)=>{
+  if(url!=='/api/switch')return original(url,options);
+  posts++;await new Promise(r=>release=r);
+  return {ok:false,json:async()=>({error:'Ověřovací chyba'})};
+ };
+ const first=d.buttons[0].onclick();await d.ready();
+ assert.match(d.elements.get('cards').innerHTML,/data-switch="3" disabled/);
+ assert.match(d.elements.get('error').textContent,/Předávám/);
+ await d.buttons[0].onclick();assert.equal(posts,1);
+ release();await first;await d.ready();
+ assert.equal(d.elements.get('error').textContent,'Ověřovací chyba');
+ assert.doesNotMatch(d.elements.get('cards').innerHTML,/data-switch="3" disabled/);
+});
 test('čekající schválení je viditelné a blokace ze serveru zabrání přepnutí',async()=>{
   const d=dashboard(true);await d.ready();
   assert.match(d.elements.get('switcher').innerHTML,/Čekání na schválení nebo odpověď/);

@@ -143,7 +143,7 @@ internal static class Program
                     plan=>{lock(Vault.SyncRoot){Vault.Data.PendingSwitch=plan;Vault.Save();}},
                     plan=>Send(new{notification="switchProgress",phase=plan.Phase.ToString(),accountApplied=plan.AccountApplied}),
                     e=>e is DesktopCloseException?e.Message:e is TimeoutException?"Codex včas nepotvrdil zavření nebo otevření chatu. Zkontroluj jeho stav.":"Operace přepnutí selhala; případný neověřený požadavek na pokračování neopakuj naslepo.");
-                var plan=method=="resume"?Vault.Data.PendingSwitch:await coordinator.PrepareAsync(target.Key,DateTimeOffset.UtcNow,ct);
+                var plan=method=="resume"?Vault.Data.PendingSwitch:await SwitchPreparation.PrepareAsync(backend,target.Key,DateTimeOffset.UtcNow,p=>{lock(Vault.SyncRoot){Vault.Data.PendingSwitch=p;Vault.Save();}Send(new{notification="switchProgress",phase=p.Phase.ToString(),accountApplied=p.AccountApplied});},ct);
                 if(plan==null||plan.TargetAccountKey!=target.Key)throw new InvalidOperationException();
                 try
                 {
@@ -219,8 +219,8 @@ internal sealed class PreservingBackend:IAccountSwitchBackend
         // The desktop snapshot already owns this title. Do not start a second
         // app-server against the live canonical authentication store for metadata.
         await Task.CompletedTask;
-        var title=ChatTitle.Resolve(null,chat.OriginalTitle);
-        chat.OriginalTitle=title;chat.BackupTitle=title;
+        c.ThrowIfCancellationRequested();
+        chat.BackupTitle=chat.OriginalTitle; // Preserve even an unnamed chat; no rename RPC.
     }
     public async Task CloseDesktopAsync(CancellationToken c){if(Metadata!=null){await Metadata.DisposeAsync();Metadata=null;}if(OperatingSystem.IsWindows()){await DesktopClose.CloseAsync(Service.Installation.DesktopPath,c);Sessions.RestartDiscovery();}else await Backend.CloseDesktopAsync(c);}
     public Task ApplyAccountAsync(string key,string? source,CancellationToken c)=>Backend.ApplyAccountAsync(key,source,c);

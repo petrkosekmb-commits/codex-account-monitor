@@ -2,6 +2,7 @@ using CodexAccountDesk;
 using System.Net;
 using System.Text;
 using System.Text.Json;
+await PreparationRegression.RunAsync();
 static void Check(bool ok,string name){if(!ok)throw new Exception(name);Console.WriteLine("PASS "+name);}
 static string Auth(string account="account-one"){
  var payload=Convert.ToBase64String(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new{sub="subject",email="one@example.com"}))).TrimEnd('=').Replace('+','-').Replace('/','_');

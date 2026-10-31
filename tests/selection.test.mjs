@@ -13,7 +13,7 @@ test('dashboard has no chat picker or pinned-chat configuration',()=>{
 
 function clickContext(continuation){
  const button={dataset:{switch:'2'}},requests=[],error={textContent:'',scrollIntoView(){}};
- const context=vm.createContext({continuation,actionError:'',document:{querySelectorAll:()=>[button]},$:()=>error,api:async(...args)=>requests.push(args),update:async()=>{}});
+ const context=vm.createContext({continuation,actionError:'',switchRequestPending:false,draw(){},document:{querySelectorAll:()=>[button]},$:()=>error,api:async(...args)=>requests.push(args),update:async()=>{}});
  const line=script.split('\n').find(l=>l.includes("document.querySelectorAll('button[data-switch]')"));
  vm.runInContext(line,context);
  return {button,requests,error};
@@ -42,7 +42,7 @@ test('automation toggle does not persist an old chat',async()=>{
 
 test('disabled switch shows reason for each blocking condition',()=>{
  const rule=script.split('\n').find(l=>l.includes('const switchReason='));
- const base={current:false,sw:{ready:true,desktop:true},s:{connected:true},state:{},continuation:{threadId:'a',reason:''},date:()=> 'later'};
+ const base={switchRequestPending:false,current:false,sw:{ready:true,desktop:true},s:{connected:true},state:{},continuation:{threadId:'a',reason:''},date:()=> 'later'};
  for(const patch of [{s:{connected:true,error:'retry',refreshHealth:{nextAttemptAt:1}}},{state:{refreshing:true}},{continuation:{reason:'Čekám na stav rozpracovaného chatu.'}},{continuation:{}},{sw:{ready:false,desktop:false}},{sw:{ready:true,desktop:true,pending:{}}}]){
   const c=vm.createContext({...base,...patch});vm.runInContext(rule+';globalThis.reason=switchReason',c);assert.ok(c.reason.length>10);
  }

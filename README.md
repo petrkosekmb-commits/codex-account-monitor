@@ -1,4 +1,16 @@
-# Přehled účtů Codex 0.2.19
+## Oprava pripravy chatu bez nazvu / unnamed chat preparation
+
+CZ: Opraveno selhani SwitchTitle.Stamp pred zmenou uctu. Prepinani zachova presny overeny identifikator chatu a puvodni nazev, vcetne chybejiciho nazvu. Nazev se neopatruje datem ani nemení. Blokace nejednoznacne ulohy a cekajiciho schvaleni zustavaji. Regrese pouziva synteticky backend; skutecne predani touto verzi zatim neni overene.
+
+EN: Fixed SwitchTitle.Stamp failure before account application. Preparation preserves the verified thread ID and original title, including absent titles, without timestamping or renaming. Ambiguous work and pending approvals remain blocked. Regression coverage uses a synthetic backend; a live handoff with this version is not yet verified.
+
+## 0.2.20 - spolehlive kliknuti pri obnovovani prehledu / reliable clicks during polling
+
+CZ: Pravidelna obnova uz nevymeni tlacitko mezi stisknutim a uvolnenim mysi nebo klavesy. Prave odesilany pozadavek blokuje druhy klik a jeho stav i pripadna chyba zustanou viditelne. Prehled obsahuje ikonu se ctyrmi body a ctyri karty vedle sebe. Regrese pouzivaji pouze synteticke ucty. Toto vydani nedoklada nove skutecne prepnuti uctu ani dlouhodobou stabilitu prihlaseni. Nejednoznacny rozpracovany chat nadale blokuje prepnuti s pokracovanim.
+
+EN: Polling no longer replaces a button between pointer/key press and release. An in-flight request prevents duplicate clicks, and progress or errors remain visible. The dashboard includes a four-dot favicon and four side-by-side account cards. Regressions use synthetic accounts only. This release does not establish a new live account handoff or long-term login stability. Ambiguous current work still blocks switching with continuation.
+
+# Přehled účtů Codex 0.2.20
 
 Místní přehled limitů čtyř účtů, kruhový odpočet do očekávané obnovy, údaje o platnosti předplatného a volitelné automatické přepínání. Nezávislý komunitní projekt pro Windows.
 
