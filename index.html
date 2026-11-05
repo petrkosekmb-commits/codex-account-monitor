@@ -23,6 +23,8 @@
 .manual-switch .manual-switch-heading h3{margin:0;font-size:15px;flex:none}
 .manual-switch-heading .muted{margin:0;flex:1;min-width:220px}
 .manual-switch .switch-account-grid{margin-top:8px;gap:10px}
+.account-heading>div{flex:1;min-width:0}
+.account-heading h2{white-space:nowrap;word-break:normal;font-size:17px;line-height:1.4}
 </style>
 <script>
 let KEY='__MONITOR_KEY__';let state,actionError='',switchRequestPending=false;
@@ -101,6 +103,14 @@ async function api(path,method='GET',data){
   }
   const v=await r.json();if(!r.ok)throw new Error(v.error);return v;
 }
+function fitAccountEmails(){
+  const headings=[...document.querySelectorAll('#cards .account-heading h2')];
+  for(const h of headings)h.style.fontSize='17px';
+  let size=17;
+  for(const h of headings){if(h.clientWidth>0&&h.scrollWidth>h.clientWidth)size=Math.min(size,17*(h.clientWidth-2)/h.scrollWidth);}
+  for(const h of headings)h.style.fontSize=Math.floor(size*10)/10+'px';
+}
+globalThis.addEventListener?.('resize',fitAccountEmails);
 async function update(){try{state=await api('state');if(!switchRequestPending&&state.switcher?.lastSwitch?.status==='complete'&&actionError.startsWith('Požadavek přijat.'))actionError='Přepnutí účtu a pokračování jsou ověřené.';else if(!switchRequestPending&&state.switcher?.lastSwitch?.status==='error'&&actionError.startsWith('Požadavek přijat.'))actionError=state.switcher.lastSwitch.error||'Přepnutí nebylo potvrzené.';draw();$('error').textContent=actionError;}catch{$('error').textContent='Spojení s přehledem selhalo. Obnov tuto stránku klávesou F5.';}}
 function draw(){
   if(interactionHeld){drawDeferred=true;return;}
@@ -163,6 +173,7 @@ function draw(){
       setTimeout(()=>location.reload(),5000);
     }catch(e){actionError=e.message;$('error').textContent=actionError;b.disabled=false;}
   });
+  fitAccountEmails();
   const l=state.login;$('login').style.display=l?'block':'none';
   if(l){$('login').innerHTML=`<b>Přihlášení účtu ${l.id}</b><p>${l.status==='waiting'?'Otevři oficiální přihlášení a vyber přesně adresu uvedenou u účtu. Pokud prohlížeč nabídne jinou adresu, použij jiný profil nebo anonymní okno.':esc(l.message||'Připravuji přihlášení…')}</p>${l.url?`<a class="btn" target="_blank" rel="noreferrer" href="${esc(l.url)}">Otevřít přihlášení</a> `:''}<button id="cancel">${l.url?'Zrušit':'Zavřít'}</button>`;$('cancel').onclick=async()=>{await api('cancel','POST');await update();};}
 }
