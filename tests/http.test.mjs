@@ -33,6 +33,13 @@ test('isolated HTTP server protects operations, rejects duplicates, and recovers
       assert.equal((await fetch(url+'/api/switch',{method:'POST',headers,body:JSON.stringify({id:8})})).status,400);
       assert.equal((await fetch(url+'/api/switch',{method:'POST',headers,body:JSON.stringify({id:2})})).status,409);
     });
+    await t.test('reset use requires explicit confirmation and a ready target',async()=>{
+      const state=await (await fetch(url+'/api/state',{headers})).json();
+      const post=body=>fetch(url+'/api/reset-credit',{method:'POST',headers,body:JSON.stringify(body)});
+      assert.equal((await post({id:1,expectedEmail:state.slots[0].email})).status,400);
+      assert.equal((await post({id:1,expectedEmail:'wrong@example.com',confirmed:true})).status,400);
+      assert.equal((await post({id:1,expectedEmail:state.slots[0].email,confirmed:true})).status,409);
+    });
     await t.test('automation requires verified desktop and can always be disabled',async()=>{
       const set=body=>fetch(url+'/api/automation',{method:'POST',headers,body:JSON.stringify(body)});
       assert.equal((await set({enabled:'yes'})).status,400);
@@ -49,6 +56,26 @@ test('isolated HTTP server protects operations, rejects duplicates, and recovers
       const previous=runtime;await stop();child=start();runtime=await ready();
       assert.notEqual(runtime.pid,previous.pid);assert.notEqual(runtime.key,previous.key);
       assert.equal((await fetch(url+'/api/state',{headers:{'X-Monitor-Key':previous.key}})).status,403);
+    });
+    await t.test('account replacement rejects stale and duplicate identities, migrates on restart and keeps other cards',async()=>{
+      const h={'X-Monitor-Key':runtime.key,'Content-Type':'application/json'};
+      const post=body=>fetch(url+'/api/replace-account',{method:'POST',headers:h,body:JSON.stringify(body)});
+      const before=await (await fetch(url+'/api/state',{headers:h})).json();
+      const old=before.slots[0].email;
+      assert.equal((await post({id:1,expectedEmail:'stale@example.com',email:'new@example.com'})).status,409);
+      assert.equal((await post({id:1,expectedEmail:old,email:before.slots[1].email})).status,400);
+      assert.equal((await post({id:1,expectedEmail:old,email:'bad'})).status,400);
+      const exited=once(child,'exit');
+      assert.equal((await post({id:1,expectedEmail:old,email:'new@example.com'})).status,202);
+      assert.equal((await exited)[0],75);
+      child=start();runtime=await ready();
+      const after=await (await fetch(url+'/api/state',{headers:{'X-Monitor-Key':runtime.key}})).json();
+      assert.equal(after.slots[0].email,'new@example.com');assert.equal(after.slots[0].snapshot,null);
+      assert.deepEqual(after.slots[0].history,[]);assert.equal(after.automation.enabled,false);
+      assert.deepEqual(after.slots.slice(1).map(s=>s.email),before.slots.slice(1).map(s=>s.email));
+      assert.ok(after.accountMigration===undefined); // Internal archive paths are not exposed publicly.
+      const config=JSON.parse(await readFile(join(data,'accounts.json'),'utf8'));
+      assert.equal(config.accounts[0],'new@example.com');
     });
   }finally{
     await stop();

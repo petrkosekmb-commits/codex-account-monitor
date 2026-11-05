@@ -41,9 +41,9 @@ test('automation toggle does not persist an old chat',async()=>{
 });
 
 test('disabled switch shows reason for each blocking condition',()=>{
- const rule=script.split('\n').find(l=>l.includes('const switchReason='));
- const base={switchRequestPending:false,current:false,sw:{ready:true,desktop:true},s:{connected:true},state:{},continuation:{threadId:'a',reason:''},date:()=> 'later'};
- for(const patch of [{s:{connected:true,error:'retry',refreshHealth:{nextAttemptAt:1}}},{state:{refreshing:true}},{continuation:{reason:'Čekám na stav rozpracovaného chatu.'}},{continuation:{}},{sw:{ready:false,desktop:false}},{sw:{ready:true,desktop:true,pending:{}}}]){
+ const rule=script.split('\n').find(l=>l.includes('const manualSwitchReason='))+'\n'+script.split('\n').find(l=>l.includes('const switchReason='));
+ const base={switchRequestPending:false,current:false,sw:{ready:true,desktop:true},s:{email:'target@example.com',connected:true},state:{},continuation:{threadId:'a',reason:''},date:()=> 'later'};
+ for(const patch of [{s:{email:'target@example.com',connected:true,error:'retry',refreshHealth:{nextAttemptAt:1}}},{state:{refreshing:true}},{continuation:{reason:'Čekám na stav rozpracovaného chatu.'}},{continuation:{}},{sw:{ready:false,desktop:false}},{sw:{ready:true,desktop:true,pending:{}}}]){
   const c=vm.createContext({...base,...patch});vm.runInContext(rule+';globalThis.reason=switchReason',c);assert.ok(c.reason.length>10);
  }
  const c=vm.createContext(base);vm.runInContext(rule+';globalThis.reason=switchReason',c);assert.equal(c.reason,'');

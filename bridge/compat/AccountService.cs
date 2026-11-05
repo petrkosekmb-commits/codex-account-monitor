@@ -26,6 +26,8 @@ internal sealed class AccountService
     private readonly RefreshCoordinator _queries;
     private readonly AsyncLocal<bool> _allowResetCredits = new();
     private readonly ResetCreditCoordinator _resetCredits;
+    internal ResetCreditCoordinator.ConfirmedUse? LastConfirmedReset(string key)=>_resetCredits.LastConfirmedUse(key);
+    internal ResetCreditCoordinator.ConfirmedUse? LastAutomaticReset(string key)=>_resetCredits.LastAutomaticUse(key);
     private readonly SemaphoreSlim _querySlots = new(3, 3);
     private readonly SemaphoreSlim _loginGate = new(1, 1);
     private readonly SemaphoreSlim _switchGate = new(1, 1);
@@ -201,7 +203,7 @@ internal sealed class AccountService
                     var response=await InactiveUsageReader.RenewAsync(
                         (method, parameters)=>rpc.RequestAsync(method,parameters,cancellation),OwnsRegistration,
                         profile.Email,()=>rpc.RefreshFailureCode).ConfigureAwait(false);
-                    usage=UsageSnapshot.Parse(response,profile.AccountId);
+                    usage=ResetCreditMetadata.Parse(response,profile.AccountId);
                 }
                 else
                 {
@@ -214,7 +216,7 @@ internal sealed class AccountService
                 if(allowResetCredits&&usage!=null)
                 {
                     try{usage=await _resetCredits.ConsumeAsync(key,profile.AccountId,usage,
-                        (method,parameters)=>rpc.RequestAsync(method,parameters,cancellation),OwnsRegistration,cancellation).ConfigureAwait(false);}
+                        (method,parameters)=>rpc.RequestAsync(method,parameters,cancellation),OwnsRegistration,cancellation,source:"manual").ConfigureAwait(false);}
                     catch(OperationCanceledException) when(cancellation.IsCancellationRequested){throw;}
                     catch(Exception){SessionCredentialPolicy.Diagnostics[key]="rate_limit_reset/retry";}
                 }

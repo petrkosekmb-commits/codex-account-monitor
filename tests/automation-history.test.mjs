@@ -36,4 +36,3 @@ test('known reasons and exact bounded dynamic reasons survive filtering',()=>{
  }
  assert.equal(publicAutomationHistory([{decision:{reason:'Přepínám na účet 4. secret'}}])[0].decision.reason,'Stav automatiky nebyl popsán.');
 });
-

@@ -49,21 +49,21 @@ test('čekající schválení je viditelné a blokace ze serveru zabrání přep
 
 test('přehled zobrazuje serverem určený chat bez nabídky výběru',async()=>{
   const d=dashboard();await d.ready();
-  assert.match(d.elements.get('switcher').innerHTML,/Pokračování: <strong>Rozpracovaný chat/);
-  assert.doesNotMatch(d.elements.get('switcher').innerHTML,/<select|automationThread/);
+  assert.match(d.elements.get('switcherInfo').innerHTML,/Pokračování: <strong>Rozpracovaný chat/);
+  assert.doesNotMatch(d.elements.get('switcherInfo').innerHTML,/<select|automationThread/);
   vm.runInContext("state.continuation={threadId:'new',title:'Jiná rozpracovaná úloha',reason:''};draw()",d.context);
-  assert.match(d.elements.get('switcher').innerHTML,/Jiná rozpracovaná úloha/);
+  assert.match(d.elements.get('switcherInfo').innerHTML,/Jiná rozpracovaná úloha/);
   assert.doesNotMatch(d.elements.get('cards').innerHTML,/data-switch="3" disabled/);
 });
 test('historie automatiky vysvětlí důvod bez identit chatů',async()=>{
  const d=dashboard();await d.ready();vm.runInContext("state.automationHistory=[{at:1,decision:{reason:'Čekám na potvrzené vyčerpání.',enabled:true,ready:true,desktop:true,threadCount:2,waitingCount:0,activeCount:1,failedCount:0}}];draw()",d.context);
- const html=d.elements.get('switcher').innerHTML;assert.match(html,/Historie rozhodnutí automatiky/);assert.match(html,/Čekám na potvrzené vyčerpání/);assert.match(html,/úlohy 2, čeká 0, běží 1, chyby 0/);assert.match(html,/Neobsahuje názvy chatů/);
+ const html=d.elements.get('switcherInfo').innerHTML;assert.match(html,/Historie rozhodnutí automatiky/);assert.match(html,/Čekám na potvrzené vyčerpání/);assert.match(html,/úlohy 2, čeká 0, běží 1, chyby 0/);assert.match(html,/Neobsahuje názvy chatů/);
 });
 
 test('stará chyba je historie a neblokuje nový pokus',async()=>{
   const d=dashboard();await d.ready();
   vm.runInContext("state.switcher.lastSwitch={status:'error',error:'Stará blokace',requestedAt:1};draw()",d.context);
-  assert.match(d.elements.get('switcher').innerHTML,/<details(?: open)?><summary>Předchozí pokus/);
+  assert.match(d.elements.get('switcherInfo').innerHTML,/<details(?: open)?><summary>Předchozí pokus/);
   assert.doesNotMatch(d.elements.get('cards').innerHTML,/data-switch="3" disabled/);
 });
 test('tlačítko odešle pouze účet, chyba přežije pravidelnou obnovu',async()=>{
@@ -116,8 +116,58 @@ test('each account card shows available reset credits without offering an unsafe
  vm.runInContext("state.slots[0].snapshot={limits:{resetCredits:2,windows:[]}};draw()",d.context);
  let html=d.elements.get('cards').innerHTML;
  assert.match(html,/K dispozici jsou 2 resety limitu/);
- assert.match(html,/pouze zapnutá automatika/);
+ assert.match(html,/pouze po vašem výslovném potvrzení/);
  assert.doesNotMatch(html,/Resetovat limit|Obnovit limit/);
  vm.runInContext("state.slots[0].snapshot.limits.resetCredits=0;draw()",d.context);
  assert.match(d.elements.get('cards').innerHTML,/Reset limitu není k dispozici/);
+});
+
+test('replace button sends the observed identity and new address only after confirmation',async()=>{
+ const d=dashboard();await d.ready();const button={dataset:{replace:'3'}};
+ const query=d.context.document.querySelectorAll;
+ d.context.document.querySelectorAll=s=>s.includes('data-replace')?[button]:query(s);
+ d.context.prompt=()=> ' new@example.com ';d.context.confirm=()=>false;
+ vm.runInContext('draw()',d.context);
+ assert.match(d.elements.get('cards').innerHTML,/Změnit účet na kartě/);
+ await button.onclick();assert.equal(d.calls.filter(c=>c.url==='/api/replace-account').length,0);
+ d.context.confirm=()=>true;await button.onclick();
+ const request=d.calls.find(c=>c.url==='/api/replace-account');
+ assert.deepEqual(JSON.parse(request.options.body),{id:3,expectedEmail:'target@example.com',email:'new@example.com'});
+ assert.equal(button.disabled,false);assert.equal(d.elements.get('error').textContent,'Ověřovací chyba');
+});
+
+test('manual switch panel shows existing accounts with automation off and preserves waiting protection',async()=>{
+ const d=dashboard();await d.ready();
+ let html=d.elements.get('switcher').innerHTML;
+ assert.match(html,/Ručně přepnout účet Codexu/);assert.match(html,/Přepnout na: target@example.com/);
+ assert.doesNotMatch(html,/data-switch="3" disabled/);
+ vm.runInContext("state.continuation={reason:'Chat čeká na schválení.'};draw()",d.context);
+ html=d.elements.get('switcher').innerHTML;assert.match(html,/data-switch="3" disabled/);
+});
+
+test('reset expiration is shown separately from subscription and missing dates remain unknown',async()=>{
+ const d=dashboard();await d.ready();
+ let html=vm.runInContext('resetCreditInfo({resetCredits:1,resetExpirations:[2000000000]})',d.context);
+ assert.match(html,/Použít nejpozději do:/);assert.match(html,/2033/);
+ html=vm.runInContext('resetCreditInfo({resetCredits:1,resetExpirations:[]})',d.context);
+ assert.match(html,/Datum vypršení resetu zatím není ověřené/);
+ html=vm.runInContext('resetCreditInfo({resetCredits:0})',d.context);assert.match(html,/Termín dalšího získání resetu není známý/);
+ html=vm.runInContext('resetCreditInfo({resetCredits:1,resetExpirations:[1]})',d.context);assert.match(html,/termín uplynul/);
+});
+
+test('reset usage distinguishes confirmed automation from unverified service origin',async()=>{
+ const d=dashboard();await d.ready();
+ let html=vm.runInContext('resetUseInfo({resetLastAutomaticUse:{source:"automation",confirmedAt:2000000000000}})',d.context);assert.match(html,/Použila automatika přehledu/);
+ html=vm.runInContext('resetUseInfo({resetLastRedeemedAt:2000000000})',d.context);assert.match(html,/původce neověřen/);assert.doesNotMatch(html,/ručně|Použila automatika/);
+ html=vm.runInContext('resetUseInfo({resetLastAutomaticUse:{source:"manual",confirmedAt:2000000000000}})',d.context);assert.match(html,/zatím není doložené/);
+ html=vm.runInContext('resetCreditInfo({resetCredits:0,resetLastRedeemedAt:2000000000})',d.context);assert.match(html,/Poslední použití podle služby/);
+});
+
+test('reset confirmation cancellation never submits and acceptance identifies the exact account',async()=>{
+ const d=dashboard();await d.ready();const button={dataset:{reset:'3'}},query=d.context.document.querySelectorAll;
+ d.context.document.querySelectorAll=s=>s.includes('data-reset')?[button]:query(s);
+ let message;d.context.confirm=m=>{message=m;return false;};vm.runInContext('draw()',d.context);
+ await button.onclick();assert.equal(d.calls.filter(c=>c.url==='/api/reset-credit').length,0);assert.match(message,/target@example.com/);
+ d.context.confirm=()=>true;await button.onclick();const request=d.calls.find(c=>c.url==='/api/reset-credit');
+ assert.deepEqual(JSON.parse(request.options.body),{id:3,expectedEmail:'target@example.com',confirmed:true});
 });

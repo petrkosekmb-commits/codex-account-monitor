@@ -1,5 +1,5 @@
 import {recordAutomationDecision} from './automation-history.mjs';
-import {availability,sameEmail} from './core.mjs';
+import {availability,sameEmail,weeklyLimitExhausted} from './core.mjs';
 import {currentChat} from './current-chat.mjs';
 
 export async function automaticSwitch({state,switcher,save,switchAccount,now=Date.now()}){
@@ -13,13 +13,16 @@ export async function automaticSwitch({state,switcher,save,switchAccount,now=Dat
   if(switcher.threads?.some(t=>t.waiting))return pause('Nejdřív dokonči čekající schválení nebo odpověď v Codexu.');
   // Track the failure transition, not the start of a potentially long-running turn.
   const previous=auto.observedTurns??{};
-  auto.observedTurns=Object.fromEntries((switcher.threads??[]).map(t=>{
+  // Discovery gaps must not erase the in-progress turn needed to date a failure.
+  const retained=Object.fromEntries(Object.entries(previous).filter(([,turn])=>
+    Number.isFinite(turn.seenAt)&&now-turn.seenAt<24*60*60*1000));
+  auto.observedTurns={...retained,...Object.fromEntries((switcher.threads??[]).map(t=>{
     const old=previous[t.id];
     const same=!!old&&old.turnId===t.lastTurnId;
     const failed=['failed','interrupted'].includes(t.lastTurnStatus);
     const failedAt=failed?(same&&old.status==='inProgress'?now:same?old.failedAt:null):null;
-    return [t.id,{turnId:t.lastTurnId,status:t.lastTurnStatus,failedAt}];
-  }));
+    return [t.id,{turnId:t.lastTurnId,status:t.lastTurnStatus,failedAt,seenAt:now}];
+  }))};
   if(JSON.stringify(previous)!==JSON.stringify(auto.observedTurns))changed=true;
   const source=state.slots.find(s=>sameEmail(s.email,state.activeEmail));
   if(auto.waitingContinuation&&auto.waitingContinuation.sourceId!==source?.id)setWaiting(null);
@@ -28,7 +31,7 @@ export async function automaticSwitch({state,switcher,save,switchAccount,now=Dat
   if(source.error||sourceStatus==='stale'||sourceStatus==='unknown')return pause('Stav právě používaného účtu není ověřený. Čekám na úspěšnou kontrolu; vyčerpání zatím nelze potvrdit.');
   if(sourceStatus!=='exhausted'){setWaiting(null);return pause('Právě používaný účet nemá potvrzené vyčerpání limitu.');}
   const window=source.id+':'+source.snapshot.limits.windows.filter(w=>w.used>=100).map(w=>w.key+'@'+w.resetsAt).join(',');
-  auto.attempts??={};if(auto.attempts[window]){setWaiting(null);return pause('Tento vyčerpaný limit už vyvolal jeden pokus. Výsledek ověř ručně.');}
+  auto.attempts??={};
   const queued=auto.waitingContinuation;
   const queuedThread=(switcher.threads||[]).find(t=>t.id===queued?.threadId);
   const newerWork=queued&&(switcher.threads||[]).some(t=>t.id!==queued.threadId&&t.lastTurnId&&
@@ -45,13 +48,24 @@ export async function automaticSwitch({state,switcher,save,switchAccount,now=Dat
   const selected=auto.waitingContinuation?queuedThread:resolved.thread;
   if((switcher.threads||[]).some(t=>(t.status==='active'||t.lastTurnStatus==='inProgress')&&t.id!==selected?.id))return pause('Více chatů je rozpracovaných. Přepnutí by přerušilo další práci; nejdřív ji dokonči.');
   if(!selected)return pause(resolved.reason);
+  const turnIdentity=selected.lastTurnId??selected.lastTurnStartedAtMs;
+  const attemptKey=JSON.stringify([window,selected.id,turnIdentity]);
+  const legacyAttempt=auto.attempts[window];
+  // A legacy record has no turn identity. Only demonstrably newer work may pass.
+  const legacyBlocks=legacyAttempt&&!(selected.lastTurnStartedAtMs>legacyAttempt.at);
+  if(auto.attempts[attemptKey]||legacyBlocks){
+    setWaiting(null);
+    return pause('Tento vyčerpaný limit už vyvolal jeden pokus. Výsledek ověř ručně.');
+  }
   if(selected.lastTurnId&&!auto.waitingContinuation)setWaiting({sourceId:source.id,window,threadId:selected.id,turnId:selected.lastTurnId,queuedAt:now,observedTurnIds:Object.fromEntries((switcher.threads||[]).filter(t=>t.id!==selected.id).map(t=>[t.id,t.lastTurnId??null]))});
   const candidates=state.slots.filter(s=>s.id!==source.id&&s.connected&&!s.error&&availability(s,now).status==='available');
   const headroom=s=>Math.min(...s.snapshot.limits.windows.map(w=>100-w.used));
   candidates.sort((a,b)=>headroom(b)-headroom(a)||a.id-b.id);
-  const target=candidates[0];if(!target)return pause(auto.waitingContinuation?'Čekající chat je uložený. Jakmile bude dostupný ověřený volný účet, automatika naváže.':'Žádný připojený účet nemá ověřený volný zahrnutý limit.');
-  const attempt={at:now,targetId:target.id};
-  auto.attempts[window]=attempt;auto.status='switching';auto.message='Přepínám na účet '+target.id+'.';
+  const target=candidates[0];
+  if(!target&&state.slots.some(s=>s.connected&&!s.error&&availability(s,now).status==='exhausted'&&weeklyLimitExhausted(s)&&s.snapshot?.limits.resetCredits>0))return pause('Žádný účet nemá ověřený volný limit. Chcete použít uložený reset? Potvrďte jej na kartě vybraného účtu.');
+  if(!target)return pause(auto.waitingContinuation?'Čekající chat je uložený. Jakmile bude dostupný ověřený volný účet, automatika naváže.':'Žádný připojený účet nemá ověřený volný zahrnutý limit.');
+  const attempt={at:now,targetId:target.id,threadId:selected.id,turnId:selected.lastTurnId??null};
+  auto.attempts[attemptKey]=attempt;auto.status='switching';auto.message='Přepínám na účet '+target.id+'.';
   setWaiting(null);
   // Persist before any side effect. A restart or unknown result must not resend it.
   recordAutomationDecision(state,switcher,auto.message,now);
@@ -59,8 +73,8 @@ export async function automaticSwitch({state,switcher,save,switchAccount,now=Dat
   // Disabling or replacing automation during persistence must cancel the
   // unsent operation. Its reserved attempt is safe to release before dispatch.
   if(state.automation!==auto||!auto.enabled){
-    if(auto.attempts[window]===attempt)delete auto.attempts[window];
-    if(state.automation?.attempts?.[window]===attempt)delete state.automation.attempts[window];
+    if(auto.attempts[attemptKey]===attempt)delete auto.attempts[attemptKey];
+    if(state.automation?.attempts?.[attemptKey]===attempt)delete state.automation.attempts[attemptKey];
     await save();return false;
   }
   try{

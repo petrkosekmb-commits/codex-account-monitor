@@ -7,7 +7,7 @@ internal static class ResetCreditPolicy
     internal static bool TryEligible(UsageSnapshot usage, out string windowKey)
     {
         windowKey=string.Join(",",usage.Buckets.Where(b=>b.Id=="codex").SelectMany(b=>new[]{(Key:b.Id+":primary",Window:b.Primary),(Key:b.Id+":secondary",Window:b.Secondary)})
-            .Where(x=>x.Window?.Minutes is 300 or 10080 && double.IsFinite(x.Window.UsedPercent) && x.Window.UsedPercent>=100)
+            .Where(x=>x.Window?.Minutes==10080 && double.IsFinite(x.Window.UsedPercent) && x.Window.UsedPercent>=100)
             .OrderBy(x=>x.Key)
             .Select(x=>x.Key+"@"+(x.Window!.ResetsAt?.ToString()??"unknown")));
         return usage.AvailableResets is > 0 && windowKey.Length>0;

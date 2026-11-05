@@ -16,7 +16,11 @@ export function normalize(raw){
   return {known:windows.length>0&&windows.every(w=>w.used!==null),windows,credits:bucket.credits??null,
     reachedType:bucket.rateLimitReachedType??null,spendControlReached:bucket.spendControlReached===true,
     individualLimit:bucket.individualLimit??null,ordinaryUsageAllowed:raw.ordinaryUsageAllowed??null,
+    resetLastConfirmedUse:['automation','manual'].includes(raw.rateLimitResetCredits?.lastConfirmedUse?.source)&&Number.isSafeInteger(raw.rateLimitResetCredits.lastConfirmedUse.confirmedAt)&&raw.rateLimitResetCredits.lastConfirmedUse.confirmedAt>0&&raw.rateLimitResetCredits.lastConfirmedUse.confirmedAt<4102444800000?{source:raw.rateLimitResetCredits.lastConfirmedUse.source,confirmedAt:raw.rateLimitResetCredits.lastConfirmedUse.confirmedAt}:null,
+    resetLastRedeemedAt:Number.isSafeInteger(raw.rateLimitResetCredits?.lastRedeemedAt)&&raw.rateLimitResetCredits.lastRedeemedAt>0&&raw.rateLimitResetCredits.lastRedeemedAt<4102444800?raw.rateLimitResetCredits.lastRedeemedAt:null,
+    resetLastAutomaticUse:raw.rateLimitResetCredits?.lastAutomaticUse?.source==='automation'&&Number.isSafeInteger(raw.rateLimitResetCredits.lastAutomaticUse.confirmedAt)&&raw.rateLimitResetCredits.lastAutomaticUse.confirmedAt>0&&raw.rateLimitResetCredits.lastAutomaticUse.confirmedAt<4102444800000?{source:'automation',confirmedAt:raw.rateLimitResetCredits.lastAutomaticUse.confirmedAt}:null,
     resetCredits:raw.rateLimitResetCredits?.availableCount??null,
+    resetExpirations:(Array.isArray(raw.rateLimitResetCredits?.expiresAt)?raw.rateLimitResetCredits.expiresAt:raw.rateLimitResetCredits?.credits?.filter(c=>c.status==='available').map(c=>c.expiresAt)||[]).filter(t=>Number.isSafeInteger(t)&&t>0&&t<4102444800).sort((a,b)=>a-b),
     otherBuckets:Object.keys(buckets||{}).filter(k=>k!=='codex')};
 }
 export function availability(slot,now=Date.now()){
@@ -55,3 +59,5 @@ export function view(state,now=Date.now()){
   const times=slots.flatMap(s=>s.availability.nextAt?[{id:s.id,at:s.availability.nextAt}]:[]).sort((a,b)=>a.at-b.at);
   return {slots,now,activeEmail:state.activeEmail??null,available,nextExpected:times[0]??null,refreshing:state.refreshing??false};
 }
+
+export function weeklyLimitExhausted(slot){return slot?.snapshot?.limits?.windows?.some(w=>w.duration===10080&&Number.isFinite(w.used)&&w.used>=100)===true;}

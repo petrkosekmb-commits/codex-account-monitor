@@ -51,7 +51,7 @@ internal static class Program
             checkedAt=a.Usage?.CheckedAt.ToUnixTimeMilliseconds(),
             raw=a.Usage==null?null:new {
                 ordinaryUsageAllowed=a.Usage.OrdinaryUsageAllowed,
-                rateLimitResetCredits=new { availableCount=a.Usage.AvailableResets },
+                rateLimitResetCredits=new { availableCount=a.Usage.AvailableResets, expiresAt=ResetCreditMetadata.Expirations(a.Usage), lastRedeemedAt=ResetCreditMetadata.LastRedeemedAt(a.Usage), lastAutomaticUse=Service.LastAutomaticReset(a.Key), lastConfirmedUse=Service.LastConfirmedReset(a.Key) },
                 rateLimitsByLimitId=a.Usage.Buckets.ToDictionary(b=>b.Id,b=>(object)new {
                     limitId=b.Id, primary=Window(b.Primary), secondary=Window(b.Secondary), rateLimitReachedType=b.LimitState,
                     spendControlReached=b.SpendControlReached, credits=new { balance=b.CreditBalance, unlimited=b.UnlimitedCredits,
@@ -102,9 +102,20 @@ internal static class Program
             Operation=new CancellationTokenSource(TimeSpan.FromMinutes(method=="login"?15:10));var ct=Operation.Token;
             if(!Ready){await Service.InitializeAsync(ct);Ready=true;}
             if(method=="initialize"||method=="refresh"){
-                var allowResets=method=="refresh"&&msg.TryGetProperty("allowResetCredits",out var resetFlag)&&resetFlag.ValueKind==JsonValueKind.True;
+                const bool allowResets=false; // Passive refresh never spends saved resets.
                 await Service.SynchronizeCurrentAsync(ct);
                 await Task.WhenAll(Service.Accounts.Where(a=>AllowedEmail(a.Email)).Select(a=>Service.RefreshAccountAsync(a.Key,ct,allowResetCredits:allowResets)));
+            }
+            else if(method=="manual-reset")
+            {
+                if(!msg.TryGetProperty("confirmed",out var confirmed)||confirmed.ValueKind!=JsonValueKind.True)throw new InvalidOperationException();
+                var email=msg.GetProperty("email").GetString()!;if(!AllowedEmail(email))throw new InvalidOperationException();
+                if(Vault.Data.PendingSwitch!=null)throw new SwitchPreconditionException("Nejdřív dokonči připravený přechod.");
+                await Service.SynchronizeCurrentAsync(ct);
+                var target=Service.Accounts.Single(a=>string.Equals(a.Email,email,StringComparison.OrdinalIgnoreCase));
+                if(target.IsCurrent)throw new SwitchPreconditionException("Reset aktivního účtu potvrď v nastavení využití Codexu.");
+                await Service.RefreshAccountAsync(target.Key,ct,allowResetCredits:true);
+                if(target.Error!=null)throw new InvalidOperationException();
             }
             else if(method=="dismiss")
             {
@@ -267,7 +278,9 @@ internal sealed class PreservingBackend:IAccountSwitchBackend
                 async()=>await CurrentAccountAsync(c)==Target,()=>Task.Delay(1000,c));
         if(SwitchContinuation.Decide(chat,thread) is ChatResumeState settled)return settled;
         if(await CurrentAccountAsync(c)!=Target)throw new InvalidOperationException("Aktivní účet se změnil.");
-        sending();
+          if(Sessions.Threads.Any(t=>t.Id!=chat.Id&&(t.Status=="active"||t.LastTurnStatus=="inProgress")))
+              throw new InvalidOperationException("Pokračování čeká, protože je rozpracovaný další chat.");
+          sending();
         return await ContinuationReceipt.SendOnceAsync(chat,
             ()=>Sessions.SendToOwnerAsync(thread,"thread-follower-start-turn",SwitchContinuation.StartParameters(chat),2,c),
             ()=>Sessions.Threads.FirstOrDefault(t=>t.Id==chat.Id),

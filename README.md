@@ -1,3 +1,16 @@
+## Aktualizace 5. listopadu 2026
+
+- Předplatné má jednoduchou vodorovnou čáru: plná délka představuje 31 dní, 15 dní přibližně polovinu. Po vypršení je prázdná; neznámé datum se nezobrazuje jako ověřená platnost.
+- Zelený puntík připojeného účtu má při potvrzeném vyčerpání limitu výraznou červenou auru. Neznámý nebo zastaralý stav se nadále posuzuje samostatně.
+- Kruhové odpočty a zbývající limity jsou nad předplatným. Ovládání obnovy údajů, automatiky a ručního přepnutí je nahoře.
+- Pravidelná kontrola ani automatika samovolně nespotřebují uložený reset. Automatika vybírá ověřený účet s volným limitem; reset vyžaduje výslovné potvrzení konkrétního účtu a ověřené vyčerpání týdenního limitu. Reset aktivního účtu se potvrzuje v Codexu.
+- Přehled zobrazuje dostupný počet resetů, známé vypršení a doložené poslední použití. Podpora rozhraní je doplněna také v serveru a pomocníkovi.
+- Přepínání zachovává kontrolu aktuálního chatu, čekajících schválení, souběžné práce a neověřených přechodů. Výpadek seznamu chatů nezahodí pozorovaný tah; ochrana proti opakování se vztahuje na konkrétní tah a limit.
+- Změna e-mailu na kartě ověřuje identitu, zálohuje konfiguraci a vypíná automatiku do nové kontroly. Hostitel umí načíst novou konfiguraci.
+- Veřejná distribuce používá ukázkové identity a oddělený port. Přihlašovací údaje, provozní stav a osobní data nejsou součástí změny.
+
+Ověření při uložení 5. listopadu 2026: veřejná sada 145/145 testů, privátní sada 139/139 testů; sestavení veřejného pomocníka dokončeno bez chyb a upozornění. Testy používají syntetické účty. Vzhled a aktuální stav byly ověřeny v místním přehledu. To samo nedokládá úspěšné nové automatické přepnutí účtu s pokračováním chatu.
+
 ## Oprava pripravy chatu bez nazvu / unnamed chat preparation
 
 CZ: Opraveno selhani SwitchTitle.Stamp pred zmenou uctu. Prepinani zachova presny overeny identifikator chatu a puvodni nazev, vcetne chybejiciho nazvu. Nazev se neopatruje datem ani nemení. Blokace nejednoznacne ulohy a cekajiciho schvaleni zustavaji. Regrese pouziva synteticky backend; skutecne predani touto verzi zatim neni overene.
@@ -18,7 +31,7 @@ Místní přehled limitů čtyř účtů, kruhový odpočet do očekávané obno
 
 Požadavky: Windows, Codex desktop a místní CLI, Node.js 20+, PowerShell 7 a .NET SDK 10.0.4xx pro sestavení pomocníka.
 
-Soukromá edice obsahuje výchozí adresy čtyř účtů. Vlastní seznam má přednost v místním souboru accounts.json v datové složce; obsahuje objekt s polem accounts se čtyřmi různými adresami. Při zastaveném monitoru lze adresu nahradit nebo účty přeskládat. Verze 0.2.7 nejprve zálohuje původní stav do místní složky backups, zachová historii podle identity a nový účet založí bez starých limitů. Automatika se při změně seznamu vypne. Vyřazené přihlášení zůstává chráněné místně pro případ návratu, ale účet se nekontroluje ani nenabízí k přepnutí. Nedokončený přechod nejprve dokončete s původním seznamem. Provozní data jsou v %USERPROFILE%\Codex\account-monitor. Přihlašovací údaje součástí zdrojů nejsou.
+Veřejná edice obsahuje pouze čtyři ukázkové adresy. Vlastní seznam má přednost v místním souboru accounts.json v datové složce; obsahuje objekt s polem accounts se čtyřmi různými adresami. Při zastaveném monitoru lze adresu nahradit nebo účty přeskládat. Verze 0.2.7 nejprve zálohuje původní stav do místní složky backups, zachová historii podle identity a nový účet založí bez starých limitů. Automatika se při změně seznamu vypne. Vyřazené přihlášení zůstává chráněné místně pro případ návratu, ale účet se nekontroluje ani nenabízí k přepnutí. Nedokončený přechod nejprve dokončete s původním seznamem. Provozní data jsou v %USERPROFILE%\Codex\account-monitor. Přihlašovací údaje součástí zdrojů nejsou.
 
 Spusťte bridge/Build.ps1, potom Install.ps1 a Spustit-prehled.cmd. Zdrojový ZIP neobsahuje sestavené binární soubory; sestavení je nutné. Skript ověřuje otisk připnutých zdrojů codex-switch a spouští 20 regresních kontrol. Přehled: http://127.0.0.1:55162. Účty se připojují oficiálním přihlášením v prohlížeči.
 
@@ -32,7 +45,7 @@ Ruční přepnutí se spouští tlačítkem Přepnout a pokračovat. Chat už ne
 
 Volitelná automatika se zapíná samostatně v přehledu a kontroluje stav každých 30 sekund. Po potvrzeném vyčerpání aktuálního účtu vybírá připojený účet s největší rezervou. Staré údaje a nedokončený přechod automatiku blokují. Při neověřeném výsledku se vypne. Placené kredity se nenakupují ani nezapínají.
 
-Zapnutá automatika může využít dostupný získaný kredit k obnovení vyčerpaného pětihodinového nebo týdenního limitu neaktivního účtu. Nejde o obnovení přihlášení. U účtu s volným limitem se kredit nečerpá; aktivní přihlašovací relaci dál spravuje Codex. Běžné tlačítko Obnovit údaje a MCP kontrola kredity nespotřebovávají. Výsledek čerpání se ověřuje novým načtením limitů, ne pouhým odesláním požadavku.
+Uložený reset se čerpá pouze po výslovném potvrzení konkrétního účtu při ověřeném vyčerpání týdenního limitu. Samotná automatika ani Obnovit údaje jej nespotřebují. Výsledek použití se ověřuje novým načtením limitů.
 
 Přepnutí krátce zavře všechna okna Codexu, změní přihlášení a obnoví rozpracované místní chaty. Ovlivní také klienty sdílející stejné přihlášení. Názvy zůstávají zachované. Dokončené chaty se znovu nespouštějí. Nejasný výsledek odeslání pokračování se automaticky neopakuje. Nedokončený přechod je možné ručně obnovit; zahození je dovoleno pouze před změnou účtu a bez neověřeného odeslání.
 
@@ -72,4 +85,4 @@ English: Version 0.2.19 adds an allowlisted automation-decision history to the d
 - Pouze stare terminalni zaznamy bez zachovaneho duvodu dostanou jednorazove nove posouzeni. Dolozene odmitnuti obnovovaciho tokenu zastavi dalsi obnovy a vyzaduje nove prihlaseni.
 - Nejde o zaruku trvaleho prihlaseni. Vzdalenou sluzbou zrusene opravneni nelze obnovit bez uzivatele; testy odlisujeme od skutecneho automatickeho predani v provozu.
 
-English: Version 0.2.17 removes the required chat picker. Manual and automatic switching resolve the current unfinished task from the same live snapshot, ignoring legacy pinned selections. An exact pending continuation survives quota waits and is cancelled by newer work in another chat. Multiple running tasks, pending user input and uncertain chronology remain guarded. A shared 30-second snapshot-gap budget improves verification without resending messages. Authentication distinguishes access-token failures from confirmed refresh-grant rejection and preserves only allowlisted error codes. Ambiguous legacy rejection records receive one persisted re-evaluation. Confirmed invalid grants stay blocked. When automation is enabled, earned resets may be consumed for exhausted inactive accounts; ordinary read-only refreshes do not consume them. This release does not promise permanent sign-in or treat simulated tests as live handoff proof.
+English: Version 0.2.17 removes the required chat picker. Manual and automatic switching resolve the current unfinished task from the same live snapshot, ignoring legacy pinned selections. An exact pending continuation survives quota waits and is cancelled by newer work in another chat. Multiple running tasks, pending user input and uncertain chronology remain guarded. A shared 30-second snapshot-gap budget improves verification without resending messages. Authentication distinguishes access-token failures from confirmed refresh-grant rejection and preserves only allowlisted error codes. Ambiguous legacy rejection records receive one persisted re-evaluation. Confirmed invalid grants stay blocked. Current reset behavior is described in the update dated 5 November 2026: explicit confirmation is required. This release does not promise permanent sign-in or treat simulated tests as live handoff proof.

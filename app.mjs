@@ -7,14 +7,14 @@ import {existsSync} from 'node:fs';
 import {join,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {randomBytes,createHash} from 'node:crypto';
-import {EMAILS,record,sameEmail,view} from './core.mjs';
+import {EMAILS,record,sameEmail,view,availability,weeklyLimitExhausted} from './core.mjs';
 import {Rpc} from './rpc.mjs';
 import {Switcher,bridgeInstalled} from './switcher.mjs';
 import {runSwitch} from './switch-flow.mjs';
 import {automaticSwitch} from './automatic-switch.mjs';
 import {currentChat,continuationView} from './current-chat.mjs';
 import {observeAccountHealth} from './account-health.mjs';
-import {readAccountConfig} from './config.mjs';
+import {readAccountConfig,validateAccounts} from './config.mjs';
 const ROOT=dirname(fileURLToPath(import.meta.url));
 const DATA=process.env.ACCOUNT_MONITOR_DATA||join(process.env.USERPROFILE,'Codex','account-monitor');
 const accounts=await readAccountConfig(join(DATA,'accounts.json'),EMAILS);
@@ -169,6 +169,20 @@ const server=http.createServer(async(req,res)=>{
   try{
     if(req.url==='/api/state'&&req.method==='GET')return send(200,publicView());
     if(req.url==='/api/refresh'&&req.method==='POST'){if(login?.rpc||login?.bridge)return send(409,{error:'Nejdřív dokonči přihlášení.'});void refresh().catch(()=>{});return send(202,{ok:true});}
+    if(req.url==='/api/reset-credit'&&req.method==='POST'){
+      let body='';for await(const chunk of req){body+=chunk;if(body.length>1024)return send(413,{error:'Příliš dlouhý požadavek.'});}
+      let input;try{input=JSON.parse(body);}catch{return send(400,{error:'Neplatný požadavek.'});}
+      const slot=state.slots.find(s=>s.id===input.id);
+      if(input.confirmed!==true||!slot||!sameEmail(input.expectedEmail,slot.email))return send(400,{error:'Použití resetu vyžaduje potvrzení konkrétního účtu.'});
+      if(busy||switching||autoBusy||login?.bridge||login?.rpc||!switcher||!switcherView?.ready||switcherView.pending)return send(409,{error:'Probíhá jiná operace. Vyčkej na její dokončení.'});
+      if(sameEmail(slot.email,state.activeEmail))return send(409,{error:'Reset právě aktivního účtu potvrď přímo v nastavení využití Codexu.'});
+      if(slot.error||!slot.connected||availability(slot).status!=='exhausted'||!weeklyLimitExhausted(slot)||!(slot.snapshot?.limits.resetCredits>0))return send(409,{error:'Reset je povolen jen při ověřeném vyčerpání týdenního limitu a dostupném resetu. Nejdřív obnov údaje.'});
+      busy=true;
+      try{
+        switcherView=await switcher.request('manual-reset',{email:slot.email,confirmed:true},180000);applySwitcherView();await save();
+        return send(200,{ok:true,message:'Potvrzený požadavek byl zpracován. Výsledek ověř v záznamu použití resetu.'});
+      }finally{busy=false;}
+    }
     if(req.url==='/api/automation'&&req.method==='POST'){
       let body='';for await(const chunk of req){body+=chunk;if(body.length>1024)return send(413,{error:'Příliš dlouhý požadavek.'});}
       const options=JSON.parse(body);
@@ -180,6 +194,35 @@ const server=http.createServer(async(req,res)=>{
     if(req.url==='/api/dismiss-switch'&&req.method==='POST'){
       if(!switcher||switching||busy)return send(409,{error:'Probíhá jiná operace.'});
       switcherView=await switcher.request('dismiss');applySwitcherView();await save();return send(200,{ok:true});
+    }
+    if(req.url==='/api/replace-account'&&req.method==='POST'){
+      let body='';for await(const chunk of req){body+=chunk;if(body.length>1024)return send(413,{error:'Příliš dlouhý požadavek.'});}
+      let input;try{input=JSON.parse(body);}catch{return send(400,{error:'Neplatný požadavek.'});}
+      const {id,expectedEmail}=input,email=typeof input.email==='string'?input.email.trim():'';
+      const slot=state.slots.find(s=>s.id===id);
+      if(!Number.isInteger(id)||!slot||!sameEmail(slot.email,expectedEmail))return send(409,{error:'Karta účtu se změnila. Obnov přehled.'});
+      const nextAccounts=state.slots.map(s=>s.id===id?email:s.email);
+      try{validateAccounts({accounts:nextAccounts});}catch{return send(400,{error:'Zadej platnou e-mailovou adresu, která není na jiné kartě.'});}
+      if(sameEmail(email,slot.email))return send(400,{error:'Zadej jinou e-mailovou adresu.'});
+      if(busy||switching||autoBusy||stopping||login?.bridge||login?.rpc||switcherView?.pending)return send(409,{error:'Probíhá jiná operace nebo čeká přechod. Nejdřív jej dokonči.'});
+      busy=true;
+      try{
+        if(switcher){const fresh=await switcher.request('status',{},10000);switcherView=fresh;
+          if(fresh.pending||fresh.switching) return send(409,{error:'Nejdřív dokonči rozpracovaný přechod.'});}
+        if(state.lastSwitch?.status==='requested'||state.lastSwitch?.status==='error'&&state.lastSwitch.accountApplied&&state.lastSwitch.phase!=='Finished')return send(409,{error:'Nejdřív dokonči rozpracovaný přechod.'});
+        const configPath=join(DATA,'accounts.json'),backupDir=join(DATA,'backups');
+        await mkdir(backupDir,{recursive:true});
+        const original=await readFile(configPath).catch(e=>{if(e.code==='ENOENT')return JSON.stringify({accounts});throw e;});
+        await writeFile(join(backupDir,'accounts-config-'+Date.now()+'-'+randomBytes(8).toString('hex')+'.json'),original,{flag:'wx',mode:0o600});
+        const tmp=configPath+'.replacement.tmp';
+        await writeFile(tmp,JSON.stringify({accounts:nextAccounts},null,2),{mode:0o600});
+        state.automation={enabled:false,attempts:{},status:'off',message:'Seznam účtů se změnil. Automatiku můžeš po ověření účtů znovu zapnout.'};
+        await save();await rename(tmp,configPath);
+        // The supervised host reloads configuration; startup archives and migrates state by identity.
+        send(202,{ok:true,restarting:true});
+        setTimeout(()=>{void stop(75);},300);
+        return;
+      }finally{if(!res.writableEnded||res.statusCode!==202)busy=false;}
     }
     if(req.url==='/api/login'&&req.method==='POST'){
       let body='';for await(const chunk of req){body+=chunk;if(body.length>1024)return send(413,{error:'Příliš dlouhý požadavek.'});}
@@ -239,11 +282,11 @@ const automaticTimer=setInterval(async()=>{
   }
   autoBusy=true;
   try{
-    await refresh(true);
+    await refresh(false);
     await automaticSwitch({state,switcher:{...switcherView,switching},save,switchAccount});
   }catch{state.automation.enabled=false;state.automation.status='error';state.automation.message='Kontrola automatiky selhala; stav ověř ručně.';recordAutomationDecision(state,switcherView,state.automation.message);await save().catch(()=>{});}
   finally{autoBusy=false;}
 },30000);
 const statusTimer=setInterval(async()=>{if(switcher&&!busy&&!switching){try{switcherView=await switcher.request('status',{},5000);}catch{switcherView=null;switcherError='Spojení s pomocníkem není ověřené.';}}},5000);
-async function stop(){if(stopping)return;stopping=true;clearInterval(timer);clearInterval(statusTimer);clearInterval(automaticTimer);switcher?.close();for(const rpc of live)rpc.close();server.close();await saveTail.catch(()=>{});await unlink(lockPath).catch(()=>{});await unlink(join(DATA,'runtime.json')).catch(()=>{});process.exit(0);}
-process.on('SIGINT',stop);process.on('SIGTERM',stop);
+async function stop(exitCode=0){if(stopping)return;stopping=true;clearInterval(timer);clearInterval(statusTimer);clearInterval(automaticTimer);switcher?.close();for(const rpc of live)rpc.close();server.close();await saveTail.catch(()=>{});await unlink(lockPath).catch(()=>{});await unlink(join(DATA,'runtime.json')).catch(()=>{});process.exit(exitCode);}
+process.on('SIGINT',()=>stop());process.on('SIGTERM',()=>stop());

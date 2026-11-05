@@ -108,3 +108,40 @@ for(const replace of [false,true])test(`disabling automation during attempt pers
  assert.equal(await automaticSwitch(x.options),false);assert.deepEqual(x.calls,[]);
  assert.deepEqual(x.state.automation.attempts,{},'an unsent attempt must not block later re-enabling');
 });
+
+test('new turn can switch during the same exhausted quota window',async()=>{
+ const x=setup();x.switcher.threads[0].lastTurnId='first';
+ await automaticSwitch(x.options);
+ x.switcher.threads[0].lastTurnId='second';
+ await automaticSwitch(x.options);
+ assert.equal(x.calls.length,2);
+ await automaticSwitch(x.options);
+ assert.equal(x.calls.length,2);
+});
+test('legacy quota attempt permits only demonstrably newer work',async()=>{
+ for(const newer of [false,true]){
+  const x=setup();const window='1:primary@'+(now/1000+3600);
+  x.state.automation.attempts[window]={at:now,targetId:2};
+  x.switcher.threads[0].lastTurnStartedAtMs=now+(newer?1:0);
+  await automaticSwitch(x.options);
+  assert.equal(x.calls.length,newer?1:0);
+ }
+});
+test('discovery gap retains the failure transition of the exact running turn',async()=>{
+ const x=setup();x.state.slots[0].snapshot.limits.windows[0].used=10;
+ const running={id:'chat',lastTurnId:'long-turn',lastTurnStatus:'inProgress',status:'active',lastTurnStartedAtMs:now-60000};
+ const done={id:'done',lastTurnId:'short-turn',lastTurnStatus:'completed',status:'idle',lastTurnStartedAtMs:now-30000};
+ x.switcher.threads=[running,done];await automaticSwitch(x.options);
+ x.switcher.threads=[];x.options.now+=1000;await automaticSwitch(x.options);
+ x.state.automation=JSON.parse(JSON.stringify(x.state.automation));
+ x.switcher.threads=[{...running,status:'systemError',lastTurnStatus:'failed'},done];
+ x.state.slots[0].snapshot.limits.windows[0].used=100;x.options.now+=1000;
+ await automaticSwitch(x.options);assert.deepEqual(x.calls,[[3,'chat']]);
+});
+test('unknown result remains blocked after restart for the same turn',async()=>{
+ const x=setup();x.switcher.threads[0].lastTurnId='same';
+ x.options.switchAccount=async()=>{x.calls.push('send');throw Error('lost reply');};
+ await automaticSwitch(x.options);
+ x.state.automation=JSON.parse(JSON.stringify(x.state.automation));x.state.automation.enabled=true;
+ await automaticSwitch(x.options);assert.equal(x.calls.length,1);
+});

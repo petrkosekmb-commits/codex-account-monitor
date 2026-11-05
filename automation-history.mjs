@@ -13,6 +13,7 @@ const publicReasons=new Set([
  'Více chatů je rozpracovaných. Přepnutí by přerušilo další práci; nejdřív ji dokonči.',
  'Čekající chat je uložený. Jakmile bude dostupný ověřený volný účet, automatika naváže.',
  'Žádný připojený účet nemá ověřený volný zahrnutý limit.',
+ 'Žádný účet nemá ověřený volný limit. Chcete použít uložený reset? Potvrďte jej na kartě vybraného účtu.',
  'Účet byl přepnut; čekám na další potvrzené vyčerpání.',
  'Přepnutí nebylo ověřené. Automatika se vypnula; zkontroluj Codex a připravený přechod.',
  'Kontrola automatiky selhala; stav ověř ručně.',

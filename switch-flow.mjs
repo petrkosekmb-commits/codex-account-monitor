@@ -9,6 +9,8 @@ export async function verifyContinuation({view,threadId,request,apply,wait=ms=>n
   const inspect=()=>{
     assertAccount(view,expectedEmail);
     if(view.threads?.some(t=>t.waiting))throw failure('approval_pending','Účet se změnil, ale Codex čeká na schválení nebo odpověď. Dokonči požadavek v chatu.');
+    if(view.threads?.some(t=>(t.status==='active'||t.lastTurnStatus==='inProgress')&&t.id!==threadId))
+      throw failure('multiple_active_chats','Po přepnutí je současně rozpracovaný další chat. Pokračování nebylo potvrzené.');
     return view.threads?.find(t=>t.id===threadId);
   };
   const poll=async(ms)=>{await wait(ms);view=await request('status');apply(view);return inspect();};

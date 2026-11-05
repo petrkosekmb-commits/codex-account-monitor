@@ -13,11 +13,26 @@ namespace CodexAccountDesk;
 internal sealed class ResetCreditCoordinator
 {
     internal sealed record Entry(string IdempotencyKey,string Outcome,long NextAttemptAt);
+    internal sealed record ConfirmedUse(long ConfirmedAt,string Source);
+    private readonly record struct ConfirmedUseEvent(long ConfirmedAt,string Source);
+    private readonly string _historyFile;
+    private readonly string _eventsFile;
+    private readonly Dictionary<string,ConfirmedUse> _history;
+    private readonly Dictionary<string,List<ConfirmedUseEvent>> _events;
+    internal ConfirmedUse? LastConfirmedUse(string accountKey){lock(_sync)return _history.TryGetValue(Key(accountKey),out var use)?use:null;}
+    internal ConfirmedUse? LastAutomaticUse(string accountKey){var use=LastConfirmedUse(accountKey);return use?.Source=="automation"?use:null;}
     private readonly string _file;
     private readonly object _sync=new();
     private readonly Dictionary<string,Entry> _entries;
     internal ResetCreditCoordinator(string directory)
     {
+        _historyFile=Path.Combine(directory,"reset-credit-history.json");
+        _eventsFile=Path.Combine(directory,"reset-credit-history-events.json");
+        _history=File.Exists(_historyFile)?JsonSerializer.Deserialize<Dictionary<string,ConfirmedUse>>(File.ReadAllText(_historyFile))??new():new();
+        _events=File.Exists(_eventsFile)?JsonSerializer.Deserialize<Dictionary<string,List<ConfirmedUseEvent>>>(File.ReadAllText(_eventsFile))??new():new();
+        foreach(var previous in _history)
+            if(!_events.ContainsKey(previous.Key))
+                _events[previous.Key]=new(){new(previous.Value.ConfirmedAt,previous.Value.Source)};
         _file=Path.Combine(directory,"reset-credit-intents.json");
         _entries=File.Exists(_file)?JsonSerializer.Deserialize<Dictionary<string,Entry>>(File.ReadAllText(_file))??new():new();
     }
@@ -36,8 +51,9 @@ internal sealed class ResetCreditCoordinator
             (prior.Outcome is not ("reset" or "alreadyRedeemed")&&prior.NextAttemptAt<=now);
     }
     internal async Task<UsageSnapshot> ConsumeAsync(string key,string expectedAccountId,UsageSnapshot usage,
-        Func<string,object,Task<JsonElement>> request,Func<bool> ownsRegistration,CancellationToken cancellation,long? nowMs=null)
+        Func<string,object,Task<JsonElement>> request,Func<bool> ownsRegistration,CancellationToken cancellation,long? nowMs=null,string source="automation")
     {
+        if(source is not ("automation" or "manual"))throw new ArgumentException("Invalid reset source.");
         cancellation.ThrowIfCancellationRequested();
         if(!ownsRegistration())return usage;
         var now=nowMs??DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -62,9 +78,21 @@ internal sealed class ResetCreditCoordinator
         var outcome=JsonValue.String(response,"outcome");
         if(outcome is not ("reset" or "alreadyRedeemed" or "nothingToReset" or "noCredit"))throw new IOException("Unknown reset-credit outcome.");
         lock(_sync){_entries[hashed]=intent with {Outcome=outcome};Save();}
+        if(outcome=="reset")
+        {
+            lock(_sync)
+            {
+                var confirmedAt=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                _history[hashed]=new(confirmedAt,source);
+                if(!_events.TryGetValue(hashed,out var events))_events[hashed]=events=new();
+                events.Add(new(confirmedAt,source));
+                SecureFiles.AtomicWriteText(_eventsFile,JsonSerializer.Serialize(_events));
+                SecureFiles.AtomicWriteText(_historyFile,JsonSerializer.Serialize(_history));
+            }
+        }
         cancellation.ThrowIfCancellationRequested();
         if(!ownsRegistration())return usage;
-        var fresh=UsageSnapshot.Parse(await request("account/rateLimits/read",new{}).ConfigureAwait(false),expectedAccountId);
+        var fresh=ResetCreditMetadata.Parse(await request("account/rateLimits/read",new{}).ConfigureAwait(false),expectedAccountId);
         Observe(key,fresh);
         return fresh;
     }

@@ -42,6 +42,8 @@ for($monitorAttempt=0;$monitorAttempt -le 3;$monitorAttempt++){
     [IO.File]::WriteAllText((Join-Path $monitorData 'host-status.json'),(@{lastExitCode=$monitorExit;hostPid=$PID;retry=$monitorAttempt;at=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()}|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
     $monitorProcess.Dispose()
     if($monitorExit -eq 0){exit 0}
+    # User-requested configuration reloads do not consume the crash retry budget.
+    if($monitorExit -eq 75){$monitorAttempt=-1}
     if($monitorAttempt -lt 3){Start-Sleep -Seconds 3}
 }
 exit $monitorExit

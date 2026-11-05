@@ -24,7 +24,21 @@ internal static class ActiveUsageClient
         if(response.StatusCode==HttpStatusCode.Unauthorized)throw new SessionCredentialException(SessionCredentialPolicy.RefreshPending);
         if(!response.IsSuccessStatusCode)throw new SessionCredentialException(SessionCredentialPolicy.Retry);
         using var payload=JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
-        return Parse(payload.RootElement,accountId);
+        var snapshot=Parse(payload.RootElement,accountId);
+        if(snapshot.AvailableResets is >=0)
+        {
+            try
+            {
+                using var detailRequest=new HttpRequestMessage(HttpMethod.Get,"https://chatgpt.com/backend-api/wham/rate-limit-reset-credits");
+                detailRequest.Headers.Authorization=new AuthenticationHeaderValue("Bearer",access);
+                detailRequest.Headers.Add("ChatGPT-Account-Id",accountId);detailRequest.Headers.UserAgent.ParseAdd("codex-cli");
+                using var details=await (transport??Client).SendAsync(detailRequest,ct).ConfigureAwait(false);
+                if(details.IsSuccessStatusCode){using var detailPayload=JsonDocument.Parse(await details.Content.ReadAsStringAsync(ct).ConfigureAwait(false));ResetCreditMetadata.AttachDetails(snapshot,detailPayload.RootElement,true);}
+            }
+            catch(OperationCanceledException) when(ct.IsCancellationRequested){throw;}
+            catch { /* Missing reset details do not invalidate a verified usage read. */ }
+        }
+        return snapshot;
     }
     internal static UsageSnapshot Parse(JsonElement root,string expectedAccountId)
     {
@@ -39,7 +53,7 @@ internal static class ActiveUsageClient
         if(root.TryGetProperty("spend_control",out var spend)&&spend.ValueKind==JsonValueKind.Object)
             bucket.SpendControlReached=JsonValue.Bool(spend,"limit_reached")??JsonValue.Bool(spend,"limitReached");
         if(root.TryGetProperty("rate_limit_reset_credits",out var resets)&&resets.ValueKind==JsonValueKind.Object)snapshot.AvailableResets=JsonValue.Int(resets,"available_count");
-        snapshot.Buckets.Add(bucket);return snapshot;
+        snapshot.Buckets.Add(bucket);return ResetCreditMetadata.Attach(snapshot,root,true);
     }
     private static UsageWindow? Window(JsonElement parent,string name)
     {

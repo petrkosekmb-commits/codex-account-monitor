@@ -82,5 +82,7 @@
   "tests/current-chat.test.mjs",
   "scripts/test-browser-switch.cjs",
   "bridge/SwitchPreparation.cs",
-  "bridge/credential-tests/PreparationRegression.cs"
+  "bridge/credential-tests/PreparationRegression.cs",
+  "bridge/compat/ResetCreditMetadata.cs",
+  "tests/reset-consent.test.mjs"
 ]

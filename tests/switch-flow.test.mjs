@@ -114,3 +114,11 @@ for(const reason of ['account','approval'])test(`a later ${reason} change preven
  }});
  assert.equal(result.ok,false);assert.equal(sends,1);assert.equal(state.lastSwitch.errorCode,reason==='account'?'account_unconfirmed':'approval_pending');
 });
+
+test('another active chat prevents continuation confirmation',async()=>{
+ const state={};
+ const result=await runSwitch({state,id:2,threadId:'chat',save:async()=>{},apply:()=>{},wait:async()=>{},
+ request:async()=>({threads:[{id:'chat',lastTurnId:'new',lastTurnStatus:'inProgress',status:'active'},{id:'other',lastTurnStatus:'inProgress',status:'active'}]})});
+ assert.equal(result.ok,false);
+ assert.equal(state.lastSwitch.errorCode,'multiple_active_chats');
+});
