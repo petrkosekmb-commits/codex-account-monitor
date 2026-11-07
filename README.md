@@ -86,3 +86,13 @@ English: Version 0.2.19 adds an allowlisted automation-decision history to the d
 - Nejde o zaruku trvaleho prihlaseni. Vzdalenou sluzbou zrusene opravneni nelze obnovit bez uzivatele; testy odlisujeme od skutecneho automatickeho predani v provozu.
 
 English: Version 0.2.17 removes the required chat picker. Manual and automatic switching resolve the current unfinished task from the same live snapshot, ignoring legacy pinned selections. An exact pending continuation survives quota waits and is cancelled by newer work in another chat. Multiple running tasks, pending user input and uncertain chronology remain guarded. A shared 30-second snapshot-gap budget improves verification without resending messages. Authentication distinguishes access-token failures from confirmed refresh-grant rejection and preserves only allowlisted error codes. Ambiguous legacy rejection records receive one persisted re-evaluation. Confirmed invalid grants stay blocked. Current reset behavior is described in the update dated 5 November 2026: explicit confirmation is required. This release does not promise permanent sign-in or treat simulated tests as live handoff proof.
+
+
+## Podpora vývoje / Support development
+
+Pokud vám projekt pomáhá, můžete dobrovolně podpořit jeho další vývoj a údržbu
+na [Buy Me a Coffee](https://buymeacoffee.com/kojakcio). Příspěvek není podmínkou používání.
+
+If this project helps you, you can optionally support its continued development
+and maintenance on [Buy Me a Coffee](https://buymeacoffee.com/kojakcio).
+Contributions are not required to use the project.
