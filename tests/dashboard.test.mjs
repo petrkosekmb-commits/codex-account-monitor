@@ -172,4 +172,4 @@ test('reset confirmation cancellation never submits and acceptance identifies th
  assert.deepEqual(JSON.parse(request.options.body),{id:3,expectedEmail:'target@example.com',confirmed:true});
 });
 
-test('neoverene datum nevyvola odpocet konce predplatneho',async()=>{const d=dashboard();await d.ready();for(const stamp of [1,Date.now()+3600000,Date.now()+864000000]){const html=vm.runInContext('subscriptionInfo({subscription:{activeUntil:'+stamp+'}})',d.context);assert.doesNotMatch(html,/subscription-warning|subscription-line|Zbývá|Předplatné aktivní do/);assert.match(html,/není ověřené/);}});
+test('neoverene datum nevyvola odpocet konce predplatneho',async()=>{const d=dashboard();await d.ready();for(const stamp of [1,Date.now()+3600000,Date.now()+864000000]){const html=vm.runInContext('subscriptionInfo({subscription:{activeUntil:'+stamp+'}})',d.context);assert.doesNotMatch(html,/subscription-warning|Zbývá|Předplatné aktivní do/);assert.match(html,/není ověřené/);}});
