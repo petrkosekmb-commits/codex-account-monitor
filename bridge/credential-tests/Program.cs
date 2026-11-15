@@ -3,6 +3,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 await PreparationRegression.RunAsync();
+PreflightRegression.Run();
 static void Check(bool ok,string name){if(!ok)throw new Exception(name);Console.WriteLine("PASS "+name);}
 static string Auth(string account="account-one"){
  var payload=Convert.ToBase64String(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new{sub="subject",email="one@example.com"}))).TrimEnd('=').Replace('+','-').Replace('/','_');
@@ -19,8 +20,8 @@ foreach(var message in new[]{"invalid_grant","refresh_token_reused","refresh_tok
 var payloadJson=JsonSerializer.Serialize(new{account_id="account-one",plan_type="plus",rate_limit=new{allowed=true,limit_reached=false,primary_window=new{used_percent=35,limit_window_seconds=18000,reset_at=2000000000},secondary_window=new{used_percent=50,limit_window_seconds=604800,reset_at=2000500000}},credits=new{balance="0",unlimited=false},rate_limit_reset_credits=new{available_count=2}});
 var handler=new FixtureHandler(HttpStatusCode.OK,payloadJson);using var client=new HttpClient(handler);
 var usage=await ActiveUsageClient.ReadAsync(auth,"account-one",CancellationToken.None,client);
-Check(handler.Requests==1&&handler.Method==HttpMethod.Get,"active usage only sends one GET, never a refresh POST");
-Check(handler.Url=="https://chatgpt.com/backend-api/wham/usage","access token goes only to the fixed official usage endpoint");
+Check(handler.Requests==2&&handler.Methods.All(m=>m==HttpMethod.Get),"usage and reset metadata only send GET requests, never refresh POST");
+Check(handler.Urls.SequenceEqual(new[]{"https://chatgpt.com/backend-api/wham/usage","https://chatgpt.com/backend-api/wham/rate-limit-reset-credits"}),"access token goes only to the fixed official usage endpoint");
 Check(handler.Access=="Bearer synthetic-access"&&handler.Account=="account-one","usage request uses access token and exact account scope");
 Check(!handler.SeenRefresh,"request never contains the refresh token");
 Check(usage.Buckets.Single().Primary!.UsedPercent==35&&usage.Buckets.Single().Primary!.Minutes==300,"five-hour limit keeps percentage and duration");
@@ -164,6 +165,6 @@ using(var cancelled=new CancellationTokenSource()){
 }
 Console.WriteLine("Credential regression suite completed.");
 sealed class FixtureHandler(HttpStatusCode status,string response):HttpMessageHandler{
- public int Requests;public HttpMethod? Method;public string? Url,Access,Account;public bool SeenRefresh;
- protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken ct){Requests++;Method=request.Method;Url=request.RequestUri!.ToString();Access=request.Headers.Authorization?.ToString();Account=request.Headers.GetValues("ChatGPT-Account-Id").Single();SeenRefresh=request.ToString().Contains("synthetic-refresh");return Task.FromResult(new HttpResponseMessage(status){Content=new StringContent(response)});}
+ public List<HttpMethod> Methods=new();public List<string> Urls=new();public int Requests;public HttpMethod? Method;public string? Url,Access,Account;public bool SeenRefresh;
+ protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken ct){Requests++;Methods.Add(request.Method);Urls.Add(request.RequestUri!.ToString());Method=request.Method;Url=request.RequestUri!.ToString();Access=request.Headers.Authorization?.ToString();Account=request.Headers.GetValues("ChatGPT-Account-Id").Single();SeenRefresh|=request.ToString().Contains("synthetic-refresh");return Task.FromResult(new HttpResponseMessage(status){Content=new StringContent(response)});}
 }

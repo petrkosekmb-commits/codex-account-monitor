@@ -31,3 +31,6 @@ Prošlo 38 testů Node a 20 kontrol pomocníka .NET (soukromé edici 37 úplnýc
 Záznam posledního přechodu nedokazuje spouštěč automatického vyčerpání: snímek zdroje obsahoval 98 procent a záznam pokusů automatiky byl prázdný. Úplný test tohoto spouštěče je otevřený. Některá přihlášení hlásila chybu služby a uživatel požádal pokračovat bez jejich obnovy. Starší test 12 směrů patřil předchozí verzi a není důkazem opravy nového selhání.
 
 Kruhový odpočet a platnost předplatného byly zkontrolovány také v místním rozhraní. Údaj o platnosti pochází z posledního přihlášení; datum další platby není ověřené. Soukromé údaje ani živé testovací záznamy nejsou součástí distribuce.
+## 0.2.23
+
+Podpora stavoveho protokolu Codex 13, soubezne hledani vlastniku chatu, obnova po odpojeni a kontrola stability vychoziho uctu. Testy pouzivaji synteticke relace. Lokalni oprava overila nalezeni beziciho chatu; nove skutecne prepnuti uctu nebylo provedeno. Pravidla rucniho potvrzeni resetu a ochrana ostatnich bezicich chatu zustavaji zachovane.

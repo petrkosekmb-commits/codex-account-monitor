@@ -138,24 +138,30 @@ internal static class Program
             }
             else if(method=="switch"||method=="resume")
             {
-                var email=msg.GetProperty("email").GetString()!;if(!AllowedEmail(email))throw new InvalidOperationException();
-                var target=Service.Accounts.Single(a=>string.Equals(a.Email,email,StringComparison.OrdinalIgnoreCase));
-                if(method=="switch"&&Vault.Data.PendingSwitch!=null)throw new SwitchPreconditionException("Nejdřív vyřeš předchozí nedokončený přechod.");
-                if(method=="switch"&&target.IsCurrent)throw new InvalidOperationException();
+                var email=msg.GetProperty("email").GetString()!;
+                if(!AllowedEmail(email))throw new SwitchPreconditionException("Vybraný účet není mezi povolenými účty přehledu.");
+                await Service.SynchronizeCurrentAsync(ct);
+                var target=Service.Accounts.SingleOrDefault(a=>string.Equals(a.Email,email,StringComparison.OrdinalIgnoreCase))
+                    ?? throw new SwitchPreconditionException("Vybraný účet nemá uložené přihlášení. Nejdřív jej přihlas v přehledu.");
+                var source=await Service.CurrentAccountKeyAsync(ct);
+                SwitchPreflight.Validate(source,target.Key,method=="resume",Vault.Data.PendingSwitch);
                 var threadId=msg.TryGetProperty("threadId",out var tid)&&tid.ValueKind==JsonValueKind.String?tid.GetString():null;
                 if(method=="resume")threadId=Vault.Data.PendingSwitch?.Chats.SingleOrDefault()?.Id;
                 await Service.CheckCredentialBackendAsync(target,ct);
                 Sessions.RestartDiscovery();await Sessions.WaitForDiscoveryAsync(ct);
                 if(Sessions.Threads.Any(t=>t.Waiting))throw new PendingApprovalException();
                 await Service.RefreshAccountAsync(target.Key,ct);
-                if(Service.Accounts.Single(a=>a.Key==target.Key).Error!=null)throw new InvalidOperationException();
+                SwitchPreflight.ValidateTarget(Service.Accounts.Single(a=>a.Key==target.Key).Error);
+                var current=await Service.CurrentAccountKeyAsync(ct);
+                SwitchPreflight.ValidateSource(source,current);
+                SwitchPreflight.Validate(current,target.Key,method=="resume",Vault.Data.PendingSwitch);
                 await using var backend=new PreservingBackend(Service,Sessions,target.Key,threadId);
                 var coordinator=new AccountSwitchCoordinator(backend,
                     plan=>{lock(Vault.SyncRoot){Vault.Data.PendingSwitch=plan;Vault.Save();}},
                     plan=>Send(new{notification="switchProgress",phase=plan.Phase.ToString(),accountApplied=plan.AccountApplied}),
                     e=>e is DesktopCloseException?e.Message:e is TimeoutException?"Codex včas nepotvrdil zavření nebo otevření chatu. Zkontroluj jeho stav.":"Operace přepnutí selhala; případný neověřený požadavek na pokračování neopakuj naslepo.");
-                var plan=method=="resume"?Vault.Data.PendingSwitch:await SwitchPreparation.PrepareAsync(backend,target.Key,DateTimeOffset.UtcNow,p=>{lock(Vault.SyncRoot){Vault.Data.PendingSwitch=p;Vault.Save();}Send(new{notification="switchProgress",phase=p.Phase.ToString(),accountApplied=p.AccountApplied});},ct);
-                if(plan==null||plan.TargetAccountKey!=target.Key)throw new InvalidOperationException();
+                var plan=method=="resume"?Vault.Data.PendingSwitch:await SwitchPreparation.PrepareAsync(backend,target.Key,DateTimeOffset.UtcNow,p=>{lock(Vault.SyncRoot){Vault.Data.PendingSwitch=p;Vault.Save();}Send(new{notification="switchProgress",phase=p.Phase.ToString(),accountApplied=p.AccountApplied});},ct,source);
+                if(plan==null||plan.TargetAccountKey!=target.Key)throw new SwitchPreconditionException("Uložený přechod neodpovídá vybranému účtu. Pokračování nebylo odesláno.");
                 try
                 {
                     if(!await coordinator.RunAsync(plan,ct))throw new IncompleteSwitchException();
@@ -198,7 +204,6 @@ internal static class Program
         public string ActualEmail {get;}=string.IsNullOrWhiteSpace(actualEmail)?"bez e-mailové adresy":actualEmail;
         public string ExpectedEmail {get;}=expectedEmail;
     }
-    private sealed class SwitchPreconditionException(string message):Exception(message){}
     private sealed class PendingApprovalException:Exception{}
     private sealed class IncompleteSwitchException:Exception{}
 }
