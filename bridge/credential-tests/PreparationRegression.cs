@@ -30,17 +30,48 @@ internal static class PreparationRegression
             catch(OperationCanceledException){}
             Require(backend.Operations==0,"cancelled preparation cannot switch");
         }
-        Console.WriteLine("PASS preserving preparation: unnamed, whitespace, date-only and named chats; invalid identity; ambiguity; cancellation; single continuation");
+        foreach (var nextAccount in new string?[] { "other", "target", null })
+        {
+            await using var backend = new Fixture(new[] { new SwitchChat { Id = id } });
+            backend.OnCapture = () => backend.Account = nextAccount;
+            var writes = 0;
+            try
+            {
+                await SwitchPreparation.PrepareAsync(backend, "target", DateTimeOffset.UtcNow,
+                    _ => writes++, CancellationToken.None, "source");
+                throw new Exception("account change during capture accepted");
+            }
+            catch (SwitchPreconditionException) { }
+            Require(writes == 0 && backend.Operations == 0 && backend.Sends == 0,
+                "account change or logout during capture cannot checkpoint, close, switch or send");
+        }
+        foreach (var actualAccount in new string?[] { "other", null })
+        {
+            await using var backend = new Fixture(new[] { new SwitchChat { Id = id } }) { Account = actualAccount };
+            var writes = 0;
+            try
+            {
+                await SwitchPreparation.PrepareAsync(backend, "target", DateTimeOffset.UtcNow,
+                    _ => writes++, CancellationToken.None, "source");
+                throw new Exception("preflight identity change accepted");
+            }
+            catch (SwitchPreconditionException) { }
+            Require(writes == 0 && backend.Operations == 0 && backend.Sends == 0,
+                "changed preflight account or missing login cannot checkpoint, close, switch or send");
+        }
+        Console.WriteLine("PASS preserving preparation: unchanged titles; verified identity; cancellation; stable source before and during capture; single continuation");
     }
     static void Require(bool value,string message){if(!value)throw new Exception(message);}
     sealed class Fixture(SwitchChat[] chats):IAccountSwitchBackend
     {
-        string account="source";public int Operations,Sends;
-        public Task<string?> CurrentAccountAsync(CancellationToken c)=>Task.FromResult<string?>(account);
-        public Task<SwitchChat[]> CaptureAsync(CancellationToken c)=>Task.FromResult(chats);
+        public string? Account { get; set; } = "source";
+        public Action? OnCapture { get; set; }
+        public int Operations,Sends;
+        public Task<string?> CurrentAccountAsync(CancellationToken c)=>Task.FromResult(Account);
+        public Task<SwitchChat[]> CaptureAsync(CancellationToken c){OnCapture?.Invoke();return Task.FromResult(chats);}
         public Task BackupNameAsync(SwitchChat chat,DateTimeOffset at,CancellationToken c){chat.BackupTitle=chat.OriginalTitle;return Task.CompletedTask;}
         public Task CloseDesktopAsync(CancellationToken c){Operations++;return Task.CompletedTask;}
-        public Task ApplyAccountAsync(string target,string? source,CancellationToken c){Operations++;account=target;return Task.CompletedTask;}
+        public Task ApplyAccountAsync(string target,string? source,CancellationToken c){Operations++;Account=target;return Task.CompletedTask;}
         public Task LaunchDesktopAsync(CancellationToken c){Operations++;return Task.CompletedTask;}
         public Task<ChatResumeState> ResumeAsync(SwitchChat chat,Action sending,CancellationToken c){Operations++;Sends++;sending();return Task.FromResult(ChatResumeState.Resumed);}
         public ValueTask DisposeAsync()=>ValueTask.CompletedTask;

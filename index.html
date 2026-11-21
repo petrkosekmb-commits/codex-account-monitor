@@ -1,4 +1,4 @@
-<!doctype html><html lang="cs" data-ui-revision="2026-11-01.1"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23f1f4f5'/%3E%3Ccircle cx='19' cy='19' r='9' fill='%2315834d'/%3E%3Ccircle cx='45' cy='19' r='9' fill='%2315834d'/%3E%3Ccircle cx='19' cy='45' r='9' fill='%23b57613'/%3E%3Ccircle cx='45' cy='45' r='10' fill='%2315834d' stroke='%23b9e8cb' stroke-width='3'/%3E%3C/svg%3E"><title>Přehled čtyř účtů Codex 0.2.24</title>
+<!doctype html><html lang="cs" data-ui-revision="2026-11-01.1"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23f1f4f5'/%3E%3Ccircle cx='19' cy='19' r='9' fill='%2315834d'/%3E%3Ccircle cx='45' cy='19' r='9' fill='%2315834d'/%3E%3Ccircle cx='19' cy='45' r='9' fill='%23b57613'/%3E%3Ccircle cx='45' cy='45' r='10' fill='%2315834d' stroke='%23b9e8cb' stroke-width='3'/%3E%3C/svg%3E"><title>Přehled čtyř účtů Codex 0.2.25</title>
 <style>
 :root{font:15px/1.5 Segoe UI,Arial,sans-serif;color:#192936;background:#f1f4f5}*{box-sizing:border-box}body{margin:0}main{max-width:1180px;margin:30px auto;padding:0 24px}h1{font-size:29px;margin:0}h2{font-size:17px;word-break:break-word;margin:8px 0}p{margin:8px 0}.sub,.muted{color:#60717e;font-size:13px}.top{display:flex;align-items:center;justify-content:space-between;gap:16px}.summary{background:#123e42;color:white;border-radius:16px;padding:22px;margin:22px 0}.summary strong{font-size:21px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.card{background:white;border:1px solid #dce3e6;border-radius:16px;padding:20px}.badge{display:inline-block;border-radius:30px;padding:4px 10px;font-size:12px;background:#edf0f2}.available .badge{background:#ddf5e7;color:#0e693c}.exhausted .badge{background:#ffe7e0;color:#963915}.num{font-size:12px;color:#60717e}.bar{height:7px;background:#edf1f2;border-radius:10px;overflow:hidden;margin:6px 0}.bar i{display:block;height:100%;background:#2a8870}.exhausted .bar i{background:#bc6538}.window{margin:18px 0}.row{display:flex;justify-content:space-between;gap:8px}.error{color:#963915}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}button,a.btn{font:inherit;font-size:13px;border:1px solid #cbd7da;border-radius:8px;padding:8px 13px;background:white;color:#164b4d;cursor:pointer;text-decoration:none}button:hover,a.btn:hover{background:#eaf2f2}button:disabled{opacity:.5;cursor:wait}#login{display:none;background:#fff4d9;border-radius:12px;padding:18px;margin-bottom:20px}details{margin-top:16px;font-size:13px}summary{cursor:pointer;color:#49626c}ul{padding-left:20px}.footer{font-size:12px;color:#60717e;margin:24px 0}@media(max-width:700px){.grid{grid-template-columns:1fr}.top{align-items:flex-start}h1{font-size:24px}}
 .limit-content{display:flex;align-items:center;gap:18px}.limit-info{flex:1;min-width:0}.reset-clock{flex:none;width:86px;height:86px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(from 0deg,var(--clock-color,#328b80) calc(var(--remaining)*1turn),#edf1f2 0)}.reset-clock>span{width:68px;height:68px;border-radius:50%;background:white;display:flex;flex-direction:column;align-items:center;justify-content:center}.reset-clock b{font-size:14px;font-variant-numeric:tabular-nums;white-space:nowrap}.reset-clock small{font-size:10px;color:#60717e}.reset-clock.stale{--clock-color:#9ba8b0}.reset-clock.expired{--clock-color:#9ba8b0}.reset-clock.exhausted{--clock-color:#e5b719}.reset-clock.exhausted b{color:#8a6500}@media(max-width:380px){.limit-content{gap:10px}.reset-clock{width:74px;height:74px}.reset-clock>span{width:58px;height:58px}.reset-clock b{font-size:12px}}
@@ -104,14 +104,19 @@ function resetCreditInfo(limits){
 }
 
 function accountIndicator(slot,current,context){
-  const authFailed=slot.requiresReauthentication===true;
-  const disconnected=!slot.connected;
-  const needsCheck=!!slot.error||!context.switcher?.desktop||!!context.activeError||slot.availability?.status==='stale';
-  const active=current&&!!context.switcher?.desktop&&!context.activeError;
-  const kind=active?'current':disconnected?'disconnected':authFailed?'reauth':needsCheck?'check':'connected';
-  const label=active?'Aktivní v Codexu':disconnected?'Nepřipojený účet':authFailed?'Obnovit přihlášení':needsCheck?'Stav vyžaduje ověření':'Připojený účet';
-  const problem=active?(disconnected?'Nepřipojený pro přepínání':authFailed?'Obnovit přihlášení':slot.error?'Kontrola účtu selhala':''):'';
-  return {kind,label,html:'<div class="account-status"><span class="primary">'+label+'</span>'+(problem?'<span class="'+(authFailed||disconnected?'problem':'check')+'">'+problem+'</span>':'')+'</div>'};
+  const status=slot.availability?.status;
+  const verified=!slot.error&&(status==='available'||status==='exhausted');
+  let kind='check',label='Stav vyžaduje ověření';
+  if(!slot.connected){
+    kind='disconnected';label='Nepřipojený účet';
+  }else if(slot.requiresReauthentication){
+    kind='reauth';label='Obnovit přihlášení';
+  }else if(verified){
+    const active=current&&context.switcher?.desktop&&!context.activeError;
+    kind=active?'current':'connected';
+    label=active?'Účet ověřen · aktivní v Codexu':'Účet ověřen';
+  }
+  return {kind,label,html:'<div class="account-status"><span class="primary">'+label+'</span></div>'};
 }
 async function api(path,method='GET',data){
   const request=()=>fetch('/api/'+path,{method,headers:{'X-Monitor-Key':KEY,'Content-Type':'application/json'},body:data?JSON.stringify(data):undefined});
@@ -134,7 +139,10 @@ async function update(){try{state=await api('state');if(!switchRequestPending&&s
 function draw(){
   if(interactionHeld){drawDeferred=true;return;}
   const displayOrder=[1,2,3,4],orderedSlots=displayOrder.map(id=>(state.slots||[]).find(s=>s.id===id)).filter(Boolean);
-  const dotState=orderedSlots.map(s=>{const current=s.email===state.activeEmail&&state.switcher?.desktop&&!state.activeError;const kind=current?'current':s.requiresReauthentication?'reauth':!s.connected?'disconnected':s.error?'disconnected':'connected';return `<span class="header-account-dot ${kind}" title="Účet ${s.id}: ${kind==='current'?'aktivní':kind==='connected'?'připojený':kind==='reauth'?'vyžaduje přihlášení':'ověření vyžadováno'}" aria-label="Účet ${s.id}"></span>`}).join('');
+  const dotState=orderedSlots.map(slot=>{
+    const {kind,label}=accountIndicator(slot,slot.email===state.activeEmail,state);
+    return `<span class="header-account-dot ${kind}" title="Účet ${slot.id}: ${label}" aria-label="Účet ${slot.id}: ${label}"></span>`;
+  }).join('');
   $('accountDots').innerHTML=dotState+'<span class="header-account-dots-label">4 účty</span>';
   $('refresh').disabled=state.refreshing||!!state.login?.url;$('refresh').textContent=state.refreshing?'Kontroluji…':'Obnovit údaje';
   $('next').textContent=state.available.length?`Zahrnutý limit zbývá u ${state.available.length} ze 4 účtů`:state.nextExpected?`Nejbližší očekávaná obnova: ${date(state.nextExpected.at)}`:'Dostupný účet zatím není ověřený';

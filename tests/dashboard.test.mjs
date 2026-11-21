@@ -3,6 +3,27 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 
+test('account verification stays independent of desktop discovery for all four cards',async()=>{
+  const d=dashboard();
+  await d.ready();
+  const indicator=vm.runInContext('accountIndicator',d.context);
+  for(const id of [1,2,3,4]){
+    const slot={id,connected:true,availability:{status:'available'}};
+    for(const desktop of [false,true]){
+      const context={switcher:{desktop}};
+      assert.equal(indicator(slot,false,context).label,'Účet ověřen');
+      assert.equal(indicator(slot,true,context).kind,desktop?'current':'connected');
+      for(const status of ['unknown','stale']){
+        assert.equal(indicator({...slot,availability:{status}},true,context).kind,'check');
+      }
+      assert.equal(indicator({...slot,availability:{status:'exhausted'}},false,context).kind,'connected');
+      assert.equal(indicator({...slot,error:'retry'},true,context).kind,'check');
+      assert.equal(indicator({...slot,requiresReauthentication:true},true,context).kind,'reauth');
+      assert.equal(indicator({...slot,connected:false},true,context).kind,'disconnected');
+    }
+  }
+});
+
 const script=readFileSync(new URL('../index.html',import.meta.url),'utf8').split('<script>')[1].split('</script>')[0];
 function dashboard(waiting=false){
   const elements=new Map(),buttons=[{dataset:{switch:'3'}}],listeners={};
