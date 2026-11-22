@@ -14,6 +14,7 @@ static SessionActivityLedger Ledger(){var l=new SessionActivityLedger();l.Discov
 static void Check(bool condition,string label){if(!condition)throw new Exception(label);Console.WriteLine("PASS "+label);}
 if(args.FirstOrDefault()=="--desktop-close-fixture"){DesktopCloseFixture.Run(args.ElementAtOrDefault(1)=="refuse");return;}
 await DesktopDiscoveryRegression.RunAsync();
+await NativeDesktopRegression.RunAsync();
 var ledger=Ledger();
 ledger.Apply("chat","owner",Snapshot(1200,1000,true));
 ledger.Apply("chat","owner",Snapshot(470,2000,false));

@@ -1,3 +1,13 @@
+## 0.2.26 - propojení s aktuálním desktopem
+
+Monitor podporuje současný Codex desktop pomocí místního adaptéru `CodexMonitorRelay`. Adaptér předává původní komunikaci aplikace beze změny a zpřístupňuje monitoru pouze čtení stavu a jediné ověřené pokračování vybraného chatu. Potvrzení úspěchu vyžaduje nový běžící nebo dokončený tah a správný účet. Nejasné odeslání se neopakuje.
+
+Dočasné nečinné chaty a nové prázdné chaty už nezpůsobují ztrátu přehledu ostatních úloh. Běžící dočasná úloha, souběžná práce, čekající zprávy nebo schválení nadále přepnutí blokují. Přenos používá výslovně UTF-8. Připravenost se odvozuje od skutečné odpovědi inicializace desktopu.
+
+Pro tuto integrační cestu po sestavení spusťte `scripts/Configure-DesktopRelay.ps1` s režimem `Enable` a parametry `NativeExecutable` (původní codex.exe dodaný aplikací), `DesktopExecutable` (ChatGPT.exe), `CodexHome` a `BackupDirectory` (místní záloha nastavení). Všechny cesty musí odpovídat konkrétní instalaci. Skript ověří integritu adaptéru, zazálohuje původní nastavení a nastaví uživatelské `CODEX_CLI_PATH`. Změna se projeví při příštím spuštění desktopu; již běžící aplikaci skript neukončuje. Režim `Disable` se stejnou zálohou obnoví původní nastavení. Po aktualizaci desktopu ověřte aktuální cesty. Konfigurace adaptéru a provozní data zůstávají místní a nepatří do distribuce.
+
+Sestavení spouští regresní testy protokolu, přihlášení, pokračování a adaptéru. Testy ověřují i dlouhý text s diakritikou při jiné systémové znakové sadě, prázdné a dočasné chaty, souběh, fronty a ochranu proti duplicitnímu pokračování. Automatika ani kontrola limitů nečerpají resetovací kredity. Syntetické testy samy nejsou důkazem skutečného přechodu mezi účty.
+
 ## Aktualizace 5. listopadu 2026
 
 - Předplatné má jednoduchou vodorovnou čáru: plná délka představuje 31 dní, 15 dní přibližně polovinu. Po vypršení je prázdná; neznámé datum se nezobrazuje jako ověřená platnost.

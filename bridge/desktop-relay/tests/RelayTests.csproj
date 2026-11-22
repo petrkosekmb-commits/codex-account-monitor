@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><StartupObject>RelayTests</StartupObject></PropertyGroup>
+  <ItemGroup><Compile Include="../Program.cs" Link="Relay.cs" /><Compile Include="../RelayProtocol.cs" Link="RelayProtocol.cs" /></ItemGroup>
+</Project>

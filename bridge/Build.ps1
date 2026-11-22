@@ -17,6 +17,11 @@ if($LASTEXITCODE -ne 0){throw 'Sestaveni pomocnika selhalo.'}
 if($LASTEXITCODE -ne 0){throw 'Regresni testy pomocnika selhaly; balicek neni pripraveny k vydani.'}
 & $Dotnet run --project (Join-Path $PSScriptRoot 'credential-tests\CredentialRegression.csproj') -c Release ('-p:UpstreamRoot='+$UpstreamRoot) ('-p:CustomBeforeMicrosoftCommonTargets='+(Join-Path $PSScriptRoot 'compat\ProtocolOverride.targets')) -p:UseSharedCompilation=false
 if($LASTEXITCODE -ne 0){throw 'Credential regression tests failed.'}
+& $Dotnet run --project (Join-Path $PSScriptRoot 'desktop-relay\tests\RelayTests.csproj') -c Release -p:UseSharedCompilation=false
+if($LASTEXITCODE -ne 0){throw 'Desktop relay regression tests failed.'}
+& $Dotnet publish (Join-Path $PSScriptRoot 'desktop-relay\CodexMonitorRelay.csproj') -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:UseSharedCompilation=false -o (Join-Path $PSScriptRoot 'desktop-relay\publish')
+if($LASTEXITCODE -ne 0){throw 'Desktop relay build failed.'}
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'desktop-relay\publish\CodexMonitorRelay.exe') -Destination (Join-Path $PSScriptRoot 'publish\CodexMonitorRelay.exe')
 $publishRoot=Join-Path $PSScriptRoot 'publish'
 Copy-Item -LiteralPath (Join-Path $UpstreamRoot 'LICENSE') -Destination (Join-Path $publishRoot 'LICENSE-codex-switch.txt')
 $integrity=@{}

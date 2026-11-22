@@ -39,8 +39,12 @@ internal static class ContinuationReceipt
             // result as well as a direct turn receipt, but require a new ID.
             if(response.TryGetProperty("result",out var nested))response=nested;
             if(response.TryGetProperty("turn",out var turn)&&turn.TryGetProperty("id",out var id)&&
-               id.ValueKind==JsonValueKind.String&&!string.IsNullOrWhiteSpace(id.GetString())&&id.GetString()!=chat.OriginalTurnId)
-                return await targetMatches()?ChatResumeState.Resumed:ChatResumeState.Unconfirmed;
+               id.ValueKind==JsonValueKind.String&&!string.IsNullOrWhiteSpace(id.GetString())&&id.GetString()!=chat.OriginalTurnId&&
+               turn.TryGetProperty("status",out var status)&&status.ValueKind==JsonValueKind.String)
+            {
+                var state=status.GetString() switch { "inProgress"=>ChatResumeState.Resumed,"completed"=>ChatResumeState.Completed,_=>(ChatResumeState?)null };
+                if(state is ChatResumeState confirmed)return await targetMatches()?confirmed:ChatResumeState.Unconfirmed;
+            }
             throw new InvalidDataException("Continuation receipt is missing.");
         }
         catch(OperationCanceledException) when(cancellation.IsCancellationRequested){throw;}

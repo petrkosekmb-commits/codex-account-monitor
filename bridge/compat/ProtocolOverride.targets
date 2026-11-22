@@ -2,7 +2,7 @@
   <Target Name="UseLocalSessionActivity" BeforeTargets="CoreCompile" Condition="'$(MSBuildProjectName)' == 'CodexSwitch.Protocol'">
     <ItemGroup>
       <Compile Remove="SessionActivity.cs;$(MSBuildProjectDirectory)/SessionActivity.cs;CodexRpc.cs;$(MSBuildProjectDirectory)/CodexRpc.cs;DesktopSessionMonitor.cs;$(MSBuildProjectDirectory)/DesktopSessionMonitor.cs" />
-      <Compile Include="$(MSBuildThisFileDirectory)SessionActivity.cs;$(MSBuildThisFileDirectory)CodexRpc.cs;$(MSBuildThisFileDirectory)RefreshFailureEvidence.cs;$(MSBuildThisFileDirectory)DesktopSessionMonitor.cs" />
+      <Compile Include="$(MSBuildThisFileDirectory)SessionActivity.cs;$(MSBuildThisFileDirectory)CodexRpc.cs;$(MSBuildThisFileDirectory)RefreshFailureEvidence.cs;$(MSBuildThisFileDirectory)DesktopSessionMonitor.cs;$(MSBuildThisFileDirectory)NativeDesktopSession.cs" />
     </ItemGroup>
   </Target>
   <Target Name="UseLocalCredentialOwnership" BeforeTargets="CoreCompile" Condition="'$(MSBuildProjectName)' == 'CodexSwitch.Application'">

@@ -12,6 +12,12 @@ bridge/.upstream/
 bridge/bin/
 bridge/obj/
 bridge/publish/
+bridge/desktop-relay/bin/
+bridge/desktop-relay/obj/
+bridge/desktop-relay/publish/
+bridge/desktop-relay/tests/bin/
+bridge/desktop-relay/tests/obj/
+bridge/desktop-relay/CodexMonitorRelay.bootstrap.json
 
 host-status.json
 

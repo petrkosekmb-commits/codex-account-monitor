@@ -151,9 +151,23 @@ var uncertain=await ContinuationReceipt.SendOnceAsync(receiptChat,
  ()=>Task.FromResult(true),()=>Task.CompletedTask,_=>{});
 Check(uncertain==ChatResumeState.Unconfirmed&&sends==1&&reads==11,"uncertain continuation stops after bounded reads and one send");
 Check(await ContinuationReceipt.ConfirmAsync(receiptChat,()=>receiptThread,()=>Task.FromResult(false),()=>Task.CompletedTask)==ChatResumeState.Unconfirmed,"account change blocks receipt recovery");
-foreach(var json in new[]{"{\"turn\":{\"id\":\"new\"}}","{\"result\":{\"turn\":{\"id\":\"new\"}}}"}){
- using var receipt=JsonDocument.Parse(json);
- Check(await ContinuationReceipt.SendOnceAsync(receiptChat,()=>Task.FromResult(receipt.RootElement),()=>null,()=>Task.FromResult(true),()=>Task.CompletedTask,_=>throw new Exception("unexpected diagnostic"))==ChatResumeState.Resumed,"supported transport envelope confirms a new turn");
+foreach(var status in new[]{"inProgress","completed"})foreach(var nested in new[]{false,true}){
+ var receipt=JsonSerializer.SerializeToElement(new{turn=new{id="new",status}});
+ if(nested)receipt=JsonSerializer.SerializeToElement(new{result=receipt});
+ var expected=status=="inProgress"?ChatResumeState.Resumed:ChatResumeState.Completed;
+ Check(await ContinuationReceipt.SendOnceAsync(receiptChat,()=>Task.FromResult(receipt),()=>null,()=>Task.FromResult(true),()=>Task.CompletedTask,_=>throw new Exception("unexpected diagnostic"))==expected,"supported transport envelope confirms the actual new turn status");
+ Check(await ContinuationReceipt.SendOnceAsync(receiptChat,()=>Task.FromResult(receipt),()=>receiptThread,()=>Task.FromResult(false),()=>Task.CompletedTask,_=>throw new Exception("unexpected diagnostic"))==ChatResumeState.Unconfirmed,"direct receipt requires the target account to remain selected");
+}
+foreach(var status in new string?[]{"failed","interrupted","unknown",null})foreach(var nested in new[]{false,true}){
+ var receipt=JsonSerializer.SerializeToElement(new{turn=new{id="new",status}});
+ if(nested)receipt=JsonSerializer.SerializeToElement(new{result=receipt});
+ sends=0;reads=0;diagnoses=0;
+ var result=await ContinuationReceipt.SendOnceAsync(receiptChat,()=>{sends++;return Task.FromResult(receipt);},()=>{reads++;return null;},()=>Task.FromResult(true),()=>Task.CompletedTask,_=>diagnoses++);
+ Check(result==ChatResumeState.Unconfirmed&&sends==1&&reads==11&&diagnoses==1,"failed, interrupted, unknown or null receipt status requires bounded evidence and never resends");
+}
+using(var receipt=JsonDocument.Parse("{\"turn\":{\"id\":\"new\"}}")){
+ sends=0;reads=0;
+ Check(await ContinuationReceipt.SendOnceAsync(receiptChat,()=>{sends++;return Task.FromResult(receipt.RootElement);},()=>{reads++;return null;},()=>Task.FromResult(true),()=>Task.CompletedTask,_=>{})==ChatResumeState.Unconfirmed&&sends==1&&reads==11,"receipt without status cannot confirm continuation");
 }
 Check(await ContinuationReceipt.SendOnceAsync(receiptChat,()=>throw new OperationCanceledException(),()=>receiptThread,
  ()=>Task.FromResult(true),()=>Task.CompletedTask,_=>{})==ChatResumeState.Resumed,"transport timeout can reconcile a correlated receipt");

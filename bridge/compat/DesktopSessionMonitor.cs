@@ -22,6 +22,7 @@ internal sealed class DesktopSessionMonitor : IAsyncDisposable
     private readonly ConcurrentDictionary<string, TaskCompletionSource<JsonElement>> _requests = new();
     private Task? _run;
     private Stream? _pipe;
+    private NativeDesktopSession? _native;
     private readonly object _connectionSync = new();
     private readonly Channel<bool> _queueChanges = Channel.CreateBounded<bool>(new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropWrite, SingleReader = true });
     private CancellationTokenSource? _connection;
@@ -35,7 +36,7 @@ internal sealed class DesktopSessionMonitor : IAsyncDisposable
             throw new PlatformNotSupportedException("Desktop IPC requires a supported peer-verification provider.");
         _run ??= Task.Run(RunAsync);
     }
-    public DesktopThreadState[] Threads => _ledger.Threads();
+    public DesktopThreadState[] Threads => Volatile.Read(ref _native)?.Threads ?? _ledger.Threads();
     public void RestartDiscovery()
     {
         _ledger.Reset(); Publish(_ledger.Read());
@@ -63,6 +64,11 @@ internal sealed class DesktopSessionMonitor : IAsyncDisposable
     }
     public async Task<JsonElement> SendToOwnerAsync(DesktopThreadState thread, string method, object parameters, int version, CancellationToken cancellation)
     {
+        if (Volatile.Read(ref _native) is { } native)
+        {
+            if (method != "thread-follower-start-turn" || version != 2) throw new InvalidDataException("Unsupported native desktop operation.");
+            return await native.StartTurnAsync(thread, parameters, cancellation);
+        }
         var pipe = Volatile.Read(ref _pipe) ?? throw new IOException("Codex 연결 끊김");
         var response = await RequestAsync(pipe, method, parameters, version, cancellation, thread.Owner, TimeSpan.FromSeconds(25));
         if (JsonValue.String(response, "resultType") != "success") throw new CodexRequestException(JsonValue.String(response, "error") ?? "Codex 요청에 실패했습니다.", method);
@@ -97,6 +103,33 @@ internal sealed class DesktopSessionMonitor : IAsyncDisposable
     }
     private async Task ObserveAsync(CancellationToken cancellation)
     {
+        if (OperatingSystem.IsWindows() && _windowsPipeName == "codex-ipc")
+        {
+            await using var native = await NativeDesktopSession.ConnectAsync(_home, cancellation);
+            if (native != null)
+            {
+                using var nativeConnection = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+                lock (_connectionSync) _connection = nativeConnection;
+                Volatile.Write(ref _native, native);
+                try
+                {
+                    while (true)
+                    {
+                        try { await native.RefreshAsync(nativeConnection.Token); }
+                        catch (Exception error) when (error is JsonException or KeyNotFoundException or InvalidOperationException)
+                        { throw new InvalidDataException("Native desktop state format changed.", error); }
+                        Publish(native.Activity);
+                        await Task.Delay(1000, nativeConnection.Token);
+                    }
+                }
+                finally
+                {
+                    Volatile.Write(ref _native, null);
+                    lock (_connectionSync) _connection = null;
+                    Publish(new(false, 0, 0, 0));
+                }
+            }
+        }
         await using var pipe = await ConnectAsync(cancellation);
         using var connection = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
         lock (_connectionSync) _connection = connection;
