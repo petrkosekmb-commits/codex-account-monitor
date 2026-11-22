@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {currentChat,continuationView} from '../current-chat.mjs';
+import {currentChat,continuationView,accountOnlyAllowed} from '../current-chat.mjs';
+test('account-only permits idle completed or empty chats and rejects unfinished work',()=>{
+ assert.equal(accountOnlyAllowed([]),true);
+ assert.equal(accountOnlyAllowed([{status:'idle',lastTurnStatus:'completed'},{status:'idle'}]),true);
+ for(const thread of [{status:'active'},{status:'idle',waiting:true},{status:'idle',lastTurnStatus:'failed'},{status:'idle',lastTurnStatus:'interrupted'},{status:'idle',goal:'active'},{status:'systemError'}])assert.equal(accountOnlyAllowed([thread]),false);
+});
 const t=(id,status,time)=>({id,lastTurnStatus:status,lastTurnStartedAtMs:time,status:status==='inProgress'?'active':'idle'});
 test('running task wins over stale failed and completed chats regardless of list order',()=>{
  for(const threads of [[t('old','failed',1),t('current','inProgress',3),t('done','completed',4)],[t('done','completed',4),t('current','inProgress',3),t('old','failed',1)]])assert.equal(currentChat(threads).thread.id,'current');

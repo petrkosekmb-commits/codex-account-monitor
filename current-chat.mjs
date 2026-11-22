@@ -20,6 +20,10 @@ export function currentChat(threads=[],observedTurns={}){
   return blocked('Právě rozpracovaný chat není jednoznačně ověřený. Pokračuj v něm v Codexu; přehled jej rozpozná automaticky.');
 }
 
+export function accountOnlyAllowed(threads=[]){
+  return threads.every(t=>t.status==='idle'&&!t.waiting&&(!t.lastTurnStatus||t.lastTurnStatus==='completed')&&!t.goal);
+}
+
 export function continuationView(threads,observedTurns){
   const {thread,reason}=currentChat(threads,observedTurns);
   return {threadId:thread?.id??null,title:thread?.title??null,reason};

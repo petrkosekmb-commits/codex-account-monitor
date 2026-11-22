@@ -1,6 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {runSwitch} from '../switch-flow.mjs';
+test('account-only confirms the target without requesting or claiming continuation',async()=>{
+ const state={},calls=[];
+ const result=await runSwitch({state,id:2,accountOnly:true,expectedEmail:'target@example.com',save:async()=>{},request:async method=>{calls.push(method);return {accounts:[{current:true,email:'target@example.com'}],pending:null,threads:[]};},apply:()=>{}});
+ assert.equal(result.ok,true);assert.deepEqual(calls,['switch']);assert.equal(state.lastSwitch.continuationStatus,'not_requested');assert.equal(state.lastSwitch.confirmedTurnId,undefined);
+});
+test('account-only cannot conceal an unresolved transition',async()=>{
+ const state={};const result=await runSwitch({state,id:2,accountOnly:true,expectedEmail:'target@example.com',save:async()=>{},request:async()=>({accounts:[{current:true,email:'target@example.com'}],pending:{}}),apply:()=>{}});
+ assert.equal(result.ok,false);assert.equal(state.lastSwitch.accountStatus,'unconfirmed');
+});
 
 test('partial failure refreshes the applied account and retains the pending plan',async()=>{
   const state={activeEmail:'old@example.com'},calls=[];

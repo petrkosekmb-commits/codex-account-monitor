@@ -120,7 +120,7 @@ test('isolated HTTP switch resolves the current chat from a fresh helper snapsho
             if(view.switchDelayMs)await new Promise(resolve=>setTimeout(resolve,view.switchDelayMs));
             for(const account of view.accounts)account.current=account.email===args.email;
             const chat=view.threads.find(t=>t.id===args.threadId);
-            if(!chat)throw new Error('Wrong fixture chat');
+            if(args.accountOnly){if(args.threadId)throw new Error('Unexpected continuation');return view;} if(!chat)throw new Error('Wrong fixture chat');
             chat.lastTurnId+='-continued';chat.lastTurnStatus='completed';chat.status='idle';
           }
           return view;
@@ -141,10 +141,10 @@ test('isolated HTTP switch resolves the current chat from a fresh helper snapsho
       assert.equal(result.switcher.lastSwitch.threadId,b);
       const switches=(await calls()).filter(c=>c.method==='switch');assert.equal(switches.length,1);assert.equal(switches[0].args.threadId,b);
     });
-    await t.test('finished-only fresh snapshot blocks a second switch',async()=>{
+    await t.test('finished-only fresh snapshot switches account without a continuation',async()=>{
       fixture.threads=[thread(a,'completed',1),thread(b,'completed',2)];await writeFile(fixturePath,JSON.stringify(fixture));
-      const response=await post('switch',{id:3,threadId:b});assert.equal(response.status,409);assert.match((await response.json()).error,/rozpracovaný chat/);
-      assert.equal((await calls()).filter(c=>c.method==='switch').length,1);
+      const response=await post('switch',{id:3,threadId:b});assert.equal(response.status,202); const done=await waitState(s=>!s.switcher.switching&&s.switcher.lastSwitch?.status==='complete');assert.equal(done.switcher.lastSwitch.continuationStatus,'not_requested');const call=(await calls()).filter(c=>c.method==='switch').at(-1);assert.equal(call.args.accountOnly,true);assert.equal(call.args.threadId,undefined);
+      assert.equal((await calls()).filter(c=>c.method==='switch').length,2);
     });
     await t.test('automation settings discard legacy pinned chat',async()=>{
       assert.equal((await post('automation',{enabled:false,threadId:a})).status,200);
@@ -165,14 +165,14 @@ test('isolated HTTP switch resolves the current chat from a fresh helper snapsho
       if(changed==='desktop')fixture.desktop=false;
       await writeFile(fixturePath,JSON.stringify(fixture));
       assert.equal((await post('switch',{id:3})).status,409);
-      assert.equal((await calls()).filter(c=>c.method==='switch').length,1);
+      assert.equal((await calls()).filter(c=>c.method==='switch').length,2);
     });
     await t.test('concurrent preflights accept one switch and explicitly reject the other',async()=>{
       await restoreFixture();fixture.statusDelayMs=100;fixture.switchDelayMs=300;await writeFile(fixturePath,JSON.stringify(fixture));
       const replies=await Promise.all([post('switch',{id:2}),post('switch',{id:3})]);
       assert.deepEqual(replies.map(r=>r.status).sort(),[202,409]);
       await waitState(s=>!s.switcher.switching&&s.switcher.lastSwitch?.status==='complete');
-      assert.equal((await calls()).filter(c=>c.method==='switch').length,2,'only one additional helper switch was dispatched');
+      assert.equal((await calls()).filter(c=>c.method==='switch').length,3,'only one additional helper switch was dispatched');
     });
   }finally{
     if(child&&child.exitCode===null){const exited=once(child,'exit');child.kill();await exited;}

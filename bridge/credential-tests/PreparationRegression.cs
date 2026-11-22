@@ -5,6 +5,18 @@ internal static class PreparationRegression
     public static async Task RunAsync()
     {
         var id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+        await using(var backend=new Fixture(Array.Empty<SwitchChat>()))
+        {
+            AccountSwitchPlan? saved=null;
+            var plan=await SwitchPreparation.PrepareAsync(backend,"target",DateTimeOffset.UtcNow,p=>saved=p,CancellationToken.None,"source",true);
+            Require(plan.Chats.Count==0&&saved==plan,"account-only plan is durable with zero chats");
+            var coordinator=new AccountSwitchCoordinator(backend,p=>saved=p,_=>{},_=>"failure");
+            Require(await coordinator.RunAsync(plan,CancellationToken.None)&&saved==null&&backend.Account=="target"&&backend.Sends==0&&backend.Operations==3,"account-only closes applies launches and never resumes a chat");
+        }
+        await using(var backend=new Fixture(new[]{new SwitchChat{Id=id}}))
+        {
+            try{await SwitchPreparation.PrepareAsync(backend,"target",DateTimeOffset.UtcNow,_=>throw new Exception("unexpected checkpoint"),CancellationToken.None,"source",true);throw new Exception("account-only captured a chat");}catch(InvalidDataException){}
+        }
         foreach(var title in new[]{"", " ", "[261101] ", "Original title"})
         {
             await using var backend=new Fixture(new[]{new SwitchChat{Id=id,OriginalTitle=title}});

@@ -1,3 +1,7 @@
+## 0.2.27 - ruční přepnutí bez rozpracovaného chatu
+
+Pokud jsou načtené chaty dokončené nebo prázdné, ruční tlačítko změní pouze účet. Neodešle pokračování a výsledek to výslovně uvede. Před zavřením desktopu se znovu ověřují úlohy, fronty a čekající schválení. Nedokončený přechod bez pokračování lze obnovit ze stejného uloženého plánu. Automatika nadále vyžaduje doloženou nedokončenou úlohu; samotné vyčerpání není důkazem, který dokončený chat znovu spustit.
+
 ## 0.2.26 - propojení s aktuálním desktopem
 
 Monitor podporuje současný Codex desktop pomocí místního adaptéru `CodexMonitorRelay`. Adaptér předává původní komunikaci aplikace beze změny a zpřístupňuje monitoru pouze čtení stavu a jediné ověřené pokračování vybraného chatu. Potvrzení úspěchu vyžaduje nový běžící nebo dokončený tah a správný účet. Nejasné odeslání se neopakuje.

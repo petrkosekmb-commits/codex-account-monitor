@@ -38,13 +38,18 @@ export async function verifyContinuation({view,threadId,request,apply,wait=ms=>n
   }
 }
 
-export async function runSwitch({state,id,threadId,resume,request,apply,save,now=Date.now,wait,beforeTurnId,expectedEmail}){
+export async function runSwitch({state,id,threadId,resume,accountOnly=false,request,apply,save,now=Date.now,wait,beforeTurnId,expectedEmail}){
   if(state.lastSwitch)state.switchHistory=[...(state.switchHistory??[]),{...state.lastSwitch}].slice(-20);
   state.lastSwitch={id,threadId,requestedAt:now(),status:'requested',phase:'Preparing',accountStatus:'unconfirmed',continuationStatus:'unconfirmed'};
   try{
     await save();
     const result=await request(resume?'resume':'switch',threadId);
     apply(result);assertAccount(result,expectedEmail);
+    if(accountOnly){
+      if(!expectedEmail||result.pending)throw failure('account_unconfirmed','Samostatné přepnutí účtu není potvrzené.');
+      state.lastSwitch={...state.lastSwitch,status:'complete',phase:'Finished',accountStatus:'confirmed',continuationStatus:'not_requested'};
+      return {ok:true};
+    }
     state.lastSwitch={...state.lastSwitch,phase:'VerifyingContinuation',accountStatus:expectedEmail?'confirmed':'unconfirmed'};await save();
     const confirmation=await verifyContinuation({view:result,threadId,request,apply,wait,beforeTurnId,expectedEmail});
     state.lastSwitch={...state.lastSwitch,status:'complete',phase:'Finished',continuationStatus:confirmation.status,confirmedTurnId:confirmation.turnId};

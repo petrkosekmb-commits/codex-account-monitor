@@ -12,7 +12,7 @@ import {Rpc} from './rpc.mjs';
 import {Switcher,bridgeInstalled} from './switcher.mjs';
 import {runSwitch} from './switch-flow.mjs';
 import {automaticSwitch} from './automatic-switch.mjs';
-import {currentChat,continuationView} from './current-chat.mjs';
+import {currentChat,continuationView,accountOnlyAllowed} from './current-chat.mjs';
 import {observeAccountHealth} from './account-health.mjs';
 import {readAccountConfig,validateAccounts} from './config.mjs';
 const ROOT=dirname(fileURLToPath(import.meta.url));
@@ -133,24 +133,24 @@ async function cancelLogin(){
 function publicView(){const result=view(state);result.automation=state.automation??{enabled:false,status:"off"};result.activeError=state.activeError??null;result.login=login?{id:login.id,status:login.status,url:login.url??null,message:login.message??null}:null;
   result.automationHistory=publicAutomationHistory(state.automationHistory);
   result.switcher={installed:!!switcher,ready:!!switcherView?.ready,desktop:!!switcherView?.desktop,error:switcherError,switching,
-    threads:switcherView?.threads??[],pending:switcherView?.pending??null,lastSwitch:state.lastSwitch??null,history:state.switchHistory??[]};result.continuation=continuationView(switcherView?.threads,state.automation?.observedTurns);return result;}
+    threads:switcherView?.threads??[],pending:switcherView?.pending??null,lastSwitch:state.lastSwitch??null,history:state.switchHistory??[]};result.accountOnlyAllowed=!!switcherView?.desktop&&accountOnlyAllowed(switcherView?.threads);result.continuation=continuationView(switcherView?.threads,state.automation?.observedTurns);return result;}
 async function switchAccount(id,threadId,resume=false){
   if(!switcher||!switcherView?.ready||switching||busy||login?.bridge||login?.rpc)throw new Error('Přepínač není připravený nebo právě probíhá jiná operace.');
   const slot=state.slots.find(s=>s.id===id);if(!slot?.connected)throw new Error('Nejdřív jednou přihlas vybraný účet.');
   if(resume){
     const chats=switcherView?.pending?.chats??[];
-    if(chats.length!==1)throw new Error('Připravený přechod nemá jednoznačně určený chat.');
-    threadId=chats[0].id;
+    if(chats.length>1)throw new Error('Připravený přechod nemá jednoznačně určený chat.');
+    threadId=chats[0]?.id;
   }else if(!threadId){
     const selected=currentChat(switcherView?.threads,state.automation?.observedTurns);
-    if(!selected.thread)throw new Error(selected.reason);
-    threadId=selected.thread.id;
+    if(!selected.thread&&!accountOnlyAllowed(switcherView?.threads))throw new Error(selected.reason);
+    threadId=selected.thread?.id;
   }
   const beforeTurnId=switcherView?.threads?.find(t=>t.id===threadId)?.lastTurnId;
   switching=true;busy=true;
   try{
-    const result=await runSwitch({state,id,threadId,resume,save,beforeTurnId,expectedEmail:slot.email,
-      request:(method,selected)=>switcher.request(method,method==='status'?{}:{email:slot.email,threadId:selected},method==='status'?10000:11*60*1000),
+    const result=await runSwitch({state,id,threadId,resume,accountOnly:!threadId,save,beforeTurnId,expectedEmail:slot.email,
+      request:(method,selected)=>switcher.request(method,method==='status'?{}:{email:slot.email,threadId:selected,accountOnly:!threadId},method==='status'?10000:11*60*1000),
       apply:result=>{switcherView=result;applySwitcherView();}});
     if(result.ok)switcherError=null;
   }
@@ -243,7 +243,7 @@ const server=http.createServer(async(req,res)=>{
         if(!switcherView?.ready||!switcherView?.desktop||!target?.connected)return 'Nejdřív připoj účet a vyčkej na ověření spojení s Codexem.';
         if(req.url==='/api/switch'&&switcherView.pending)return 'Předchozí přechod čeká na vyřešení. Použij jeho obnovení nebo zrušení v horní části přehledu.';
         if(req.url==='/api/switch'&&(sameEmail(target.email,state.activeEmail)||target.error))return 'Vyber jiný účet s ověřeným přihlášením.';
-        if(req.url==='/api/resume'&&(switcherView.pending?.chats?.length!==1||!sameEmail(target.email,switcherView.pending.targetEmail)))return 'Připravený přechod nemá ověřený cílový účet a jediný chat.';
+        if(req.url==='/api/resume'&&(!switcherView.pending?.chats||switcherView.pending.chats.length>1||!sameEmail(target.email,switcherView.pending.targetEmail)))return 'Připravený přechod nemá ověřený cílový účet a jediný chat.';
         return '';
       };
       let reason=blocked();if(reason)return rejectSwitch(reason);
@@ -255,8 +255,8 @@ const server=http.createServer(async(req,res)=>{
       reason=blocked();if(reason)return rejectSwitch(reason);
       if(req.url==='/api/switch'){
         const selected=currentChat(switcherView?.threads,state.automation?.observedTurns);
-        if(!selected.thread)return rejectSwitch(selected.reason);
-        threadId=selected.thread.id;
+        if(!selected.thread&&!accountOnlyAllowed(switcherView?.threads))return rejectSwitch(selected.reason);
+        threadId=selected.thread?.id;
       }
       void switchAccount(id,threadId,req.url==='/api/resume').catch(()=>{});return send(202,{requested:true});
     }

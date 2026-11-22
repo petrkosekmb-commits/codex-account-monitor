@@ -10,6 +10,14 @@ internal static class PreflightRegression
             catch (SwitchPreconditionException e) { if (!e.Message.Contains(expected)) throw new Exception("Unexpected preflight diagnostic"); }
         }
         SwitchPreflight.Validate("source", "target", false, null);
+        var idle=new SessionActivity(true,0,0,0,Queued:0,Goals:0);
+        SwitchPreflight.ValidateIdle(idle,Array.Empty<DesktopThreadState>());
+        foreach(var activity in new[]{idle with {Available=false},idle with {Queued=1},idle with {Queued=null},idle with {Goals=1},idle with {PausedQueued=1},idle with {PausedGoals=1}})
+            Reject(()=>SwitchPreflight.ValidateIdle(activity,Array.Empty<DesktopThreadState>()),"Samostatné přepnutí čeká");
+        var done=new DesktopThreadState("chat","owner","idle",false,null,null,"resumed","turn","completed",null);
+        SwitchPreflight.ValidateIdle(idle,new[]{done});
+        foreach(var thread in new[]{done with {Status="active"},done with {Waiting=true},done with {LastTurnStatus="failed"},done with {LastTurnStatus="interrupted"},done with {Goal="usageLimited"}})
+            Reject(()=>SwitchPreflight.ValidateIdle(idle,new[]{thread}),"Samostatné přepnutí čeká");
         SwitchPreflight.ValidateSource("source", "source");
         Reject(() => SwitchPreflight.ValidateSource("source", "other"), "během přípravy změnil");
         Reject(() => SwitchPreflight.ValidateSource("source", null), "není ověřené");

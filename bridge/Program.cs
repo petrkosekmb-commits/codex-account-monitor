@@ -147,6 +147,8 @@ internal static class Program
                 SwitchPreflight.Validate(source,target.Key,method=="resume",Vault.Data.PendingSwitch);
                 var threadId=msg.TryGetProperty("threadId",out var tid)&&tid.ValueKind==JsonValueKind.String?tid.GetString():null;
                 if(method=="resume")threadId=Vault.Data.PendingSwitch?.Chats.SingleOrDefault()?.Id;
+                var accountOnly=method=="resume"?Vault.Data.PendingSwitch?.Chats.Count==0:msg.TryGetProperty("accountOnly",out var only)&&only.ValueKind==JsonValueKind.True;
+                if(accountOnly&&threadId!=null)throw new SwitchPreconditionException("Samostatné přepnutí nesmí obsahovat pokračování.");
                 await Service.CheckCredentialBackendAsync(target,ct);
                 Sessions.RestartDiscovery();await Sessions.WaitForDiscoveryAsync(ct);
                 if(Sessions.Threads.Any(t=>t.Waiting))throw new PendingApprovalException();
@@ -155,12 +157,12 @@ internal static class Program
                 var current=await Service.CurrentAccountKeyAsync(ct);
                 SwitchPreflight.ValidateSource(source,current);
                 SwitchPreflight.Validate(current,target.Key,method=="resume",Vault.Data.PendingSwitch);
-                await using var backend=new PreservingBackend(Service,Sessions,target.Key,threadId);
+                await using var backend=new PreservingBackend(Service,Sessions,target.Key,threadId,accountOnly);
                 var coordinator=new AccountSwitchCoordinator(backend,
                     plan=>{lock(Vault.SyncRoot){Vault.Data.PendingSwitch=plan;Vault.Save();}},
                     plan=>Send(new{notification="switchProgress",phase=plan.Phase.ToString(),accountApplied=plan.AccountApplied}),
                     e=>e is DesktopCloseException?e.Message:e is TimeoutException?"Codex včas nepotvrdil zavření nebo otevření chatu. Zkontroluj jeho stav.":"Operace přepnutí selhala; případný neověřený požadavek na pokračování neopakuj naslepo.");
-                var plan=method=="resume"?Vault.Data.PendingSwitch:await SwitchPreparation.PrepareAsync(backend,target.Key,DateTimeOffset.UtcNow,p=>{lock(Vault.SyncRoot){Vault.Data.PendingSwitch=p;Vault.Save();}Send(new{notification="switchProgress",phase=p.Phase.ToString(),accountApplied=p.AccountApplied});},ct,source);
+                var plan=method=="resume"?Vault.Data.PendingSwitch:await SwitchPreparation.PrepareAsync(backend,target.Key,DateTimeOffset.UtcNow,p=>{lock(Vault.SyncRoot){Vault.Data.PendingSwitch=p;Vault.Save();}Send(new{notification="switchProgress",phase=p.Phase.ToString(),accountApplied=p.AccountApplied});},ct,source,accountOnly);
                 if(plan==null||plan.TargetAccountKey!=target.Key)throw new SwitchPreconditionException("Uložený přechod neodpovídá vybranému účtu. Pokračování nebylo odesláno.");
                 try
                 {
@@ -211,9 +213,10 @@ internal static class Program
 internal sealed class PreservingBackend:IAccountSwitchBackend
 {
     private readonly AccountService Service;private readonly DesktopSessionMonitor Sessions;private readonly DesktopSwitchBackend Backend;
+    private readonly bool AccountOnly;
     private readonly string? Selected;private readonly string Target;private CodexRpc? Metadata;
-    public PreservingBackend(AccountService service,DesktopSessionMonitor sessions,string target,string? selected)
-    {Service=service;Sessions=sessions;Selected=selected;Target=target;Backend=new(service,sessions,target);}
+    public PreservingBackend(AccountService service,DesktopSessionMonitor sessions,string target,string? selected,bool accountOnly=false)
+    {AccountOnly=accountOnly;Service=service;Sessions=sessions;Selected=selected;Target=target;Backend=new(service,sessions,target);}
     public Task<string?> CurrentAccountAsync(CancellationToken c)=>Backend.CurrentAccountAsync(c);
     public async Task<SwitchChat[]> CaptureAsync(CancellationToken c)
     {
@@ -221,6 +224,7 @@ internal sealed class PreservingBackend:IAccountSwitchBackend
         // Recheck the resolved task before closing the desktop. Missing discovery
         // is never permission to resume a different chat or all known chats.
         var discovered=Sessions.Threads;
+        if(AccountOnly){ValidateAccountOnly();return Array.Empty<SwitchChat>();}
         if(Selected==null)throw new InvalidOperationException("Rozpracovaný chat není ověřený.");
         if(discovered.Any(t=>t.Waiting))throw new InvalidOperationException("Chat čeká na schválení nebo odpověď.");
         if(discovered.Any(t=>t.Id!=Selected&&(t.Status=="active"||t.LastTurnStatus=="inProgress")))throw new InvalidOperationException("Současně běží jiný chat; přepnutí počká.");
@@ -230,6 +234,10 @@ internal sealed class PreservingBackend:IAccountSwitchBackend
         if(chats.Count==0)throw new InvalidOperationException("Nebyla nalezena rozpracovaná úloha.");
         return chats.OrderBy(t=>t.Id==Selected?0:1).ToArray();
     }
+    private void ValidateAccountOnly()
+    {
+        SwitchPreflight.ValidateIdle(Sessions.Current,Sessions.Threads);
+    }
     public async Task BackupNameAsync(SwitchChat chat,DateTimeOffset at,CancellationToken c)
     {
         // The desktop snapshot already owns this title. Do not start a second
@@ -238,7 +246,7 @@ internal sealed class PreservingBackend:IAccountSwitchBackend
         c.ThrowIfCancellationRequested();
         chat.BackupTitle=chat.OriginalTitle; // Preserve even an unnamed chat; no rename RPC.
     }
-    public async Task CloseDesktopAsync(CancellationToken c){if(Metadata!=null){await Metadata.DisposeAsync();Metadata=null;}if(OperatingSystem.IsWindows()){await DesktopClose.CloseAsync(Service.Installation.DesktopPath,c);Sessions.RestartDiscovery();}else await Backend.CloseDesktopAsync(c);}
+    public async Task CloseDesktopAsync(CancellationToken c){if(AccountOnly){Sessions.RestartDiscovery();await Sessions.WaitForDiscoveryAsync(c);ValidateAccountOnly();}if(Metadata!=null){await Metadata.DisposeAsync();Metadata=null;}if(OperatingSystem.IsWindows()){await DesktopClose.CloseAsync(Service.Installation.DesktopPath,c);Sessions.RestartDiscovery();}else await Backend.CloseDesktopAsync(c);}
     public Task ApplyAccountAsync(string key,string? source,CancellationToken c)=>Backend.ApplyAccountAsync(key,source,c);
     public async Task LaunchDesktopAsync(CancellationToken c)
     {
