@@ -11,7 +11,7 @@ internal sealed record SessionActivity(bool Available, int Running, int Waiting,
     int? Queued = null, int? Goals = null, int PausedQueued = 0, int PausedGoals = 0, string? QueueProblem = null);
 
 internal sealed record DesktopThreadState(string Id, string Owner, string Status, bool Waiting, string? Goal, string? Title,
-    string? ResumeState, string? LastTurnId, string? LastTurnStatus, string? LastMessageId, long? LastTurnStartedAtMs = null);
+    string? ResumeState, string? LastTurnId, string? LastTurnStatus, string? LastMessageId, long? LastTurnStartedAtMs = null, string? LastTurnErrorCode = null, long? LastTurnCompletedAtMs = null);
 
 internal sealed class SessionActivityLedger
 {

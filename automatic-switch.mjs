@@ -12,6 +12,7 @@ export async function automaticSwitch({state,switcher,save,switchAccount,now=Dat
   if(!switcher?.ready||!switcher.desktop||switcher.switching)return pause('Čekám na ověřené spojení s aplikací Codex.');
   if(switcher.threads?.some(t=>t.waiting))return pause('Nejdřív dokonči čekající schválení nebo odpověď v Codexu.');
   // Track the failure transition, not the start of a potentially long-running turn.
+  const source=state.slots.find(s=>sameEmail(s.email,state.activeEmail));
   const previous=auto.observedTurns??{};
   // Discovery gaps must not erase the in-progress turn needed to date a failure.
   const retained=Object.fromEntries(Object.entries(previous).filter(([,turn])=>
@@ -21,16 +22,36 @@ export async function automaticSwitch({state,switcher,save,switchAccount,now=Dat
     const same=!!old&&old.turnId===t.lastTurnId;
     const failed=['failed','interrupted'].includes(t.lastTurnStatus);
     const failedAt=failed?(same&&old.status==='inProgress'?now:same?old.failedAt:null):null;
-    return [t.id,{turnId:t.lastTurnId,status:t.lastTurnStatus,failedAt,seenAt:now}];
+    // Only a failure witnessed on this exact account is evidence when its
+    // independent quota refresh is unavailable. Old failures are not inherited.
+    const sameSource=same&&source&&old.sourceId===source.id;
+    const quotaFailure=t.lastTurnStatus==='failed'&&t.lastTurnErrorCode==='usageLimitExceeded';
+    const recentTransition=sameSource&&old.status==='inProgress'&&Number.isFinite(old.seenAt)&&
+      now>=old.seenAt&&now-old.seenAt<=120000&&Number.isFinite(t.lastTurnCompletedAtMs)&&
+      t.lastTurnCompletedAtMs>=old.seenAt-1000&&t.lastTurnCompletedAtMs<=now+1000;
+    const quotaFailedAt=quotaFailure&&sameSource?(recentTransition?now:old.quotaFailedAt??null):null;
+    return [t.id,{turnId:t.lastTurnId,status:t.lastTurnStatus,failedAt,seenAt:now,sourceId:source?.id??null,quotaFailedAt}];
   }))};
   if(JSON.stringify(previous)!==JSON.stringify(auto.observedTurns))changed=true;
-  const source=state.slots.find(s=>sameEmail(s.email,state.activeEmail));
   if(auto.waitingContinuation&&auto.waitingContinuation.sourceId!==source?.id)setWaiting(null);
   if(!source)return pause('Právě používaný účet se nepodařilo určit.');
   const sourceStatus=availability(source,now).status;
-  if(source.error||sourceStatus==='stale'||sourceStatus==='unknown')return pause('Stav právě používaného účtu není ověřený. Čekám na úspěšnou kontrolu; vyčerpání zatím nelze potvrdit.');
-  if(sourceStatus!=='exhausted'){setWaiting(null);return pause('Právě používaný účet nemá potvrzené vyčerpání limitu.');}
-  const window=source.id+':'+source.snapshot.limits.windows.filter(w=>w.used>=100).map(w=>w.key+'@'+w.resetsAt).join(',');
+  for(const [id,turn] of Object.entries(auto.observedTurns)){
+    if(!Number.isFinite(turn.quotaFailedAt))continue;
+    const recovered=sourceStatus==='available'&&!source.error&&source.snapshot.checkedAt>turn.quotaFailedAt;
+    const superseded=(switcher.threads??[]).some(t=>t.id!==id&&t.lastTurnStartedAtMs>turn.quotaFailedAt);
+    if(recovered||superseded){turn.quotaFailedAt=null;changed=true;}
+  }
+  const resolved=currentChat(switcher.threads,auto.observedTurns);
+  const witnessed=resolved.thread&&auto.observedTurns[resolved.thread.id];
+  const directFailure=resolved.thread?.lastTurnStatus==='failed'&&resolved.thread.lastTurnErrorCode==='usageLimitExceeded'&&
+    witnessed?.sourceId===source.id&&Number.isFinite(witnessed.quotaFailedAt)&&
+    now>=witnessed.quotaFailedAt&&now-witnessed.quotaFailedAt<24*60*60*1000&&
+    // A successful later check of available quota supersedes the failure.
+    !(sourceStatus==='available'&&!source.error&&source.snapshot.checkedAt>witnessed.quotaFailedAt);
+  if(!directFailure&&(source.error||sourceStatus==='stale'||sourceStatus==='unknown'))return pause('Stav právě používaného účtu není ověřený. Čekám na úspěšnou kontrolu; vyčerpání zatím nelze potvrdit.');
+  if(!directFailure&&sourceStatus!=='exhausted'){setWaiting(null);return pause('Právě používaný účet nemá potvrzené vyčerpání limitu.');}
+  const window=directFailure?source.id+':usageFailure:'+resolved.thread.lastTurnId:source.id+':'+source.snapshot.limits.windows.filter(w=>w.used>=100).map(w=>w.key+'@'+w.resetsAt).join(',');
   auto.attempts??={};
   const queued=auto.waitingContinuation;
   const queuedThread=(switcher.threads||[]).find(t=>t.id===queued?.threadId);
@@ -44,7 +65,6 @@ export async function automaticSwitch({state,switcher,save,switchAccount,now=Dat
   // Remember only a previously eligible, exact turn. A missing snapshot is not
   // permission to resume another chat; manual work/account changes invalidate it.
   if(auto.waitingContinuation&&!queuedThread?.lastTurnId)return pause('Čekající chat se nyní ověřuje. Pokračování zůstává uložené.');
-  const resolved=currentChat(switcher.threads,auto.observedTurns);
   const selected=auto.waitingContinuation?queuedThread:resolved.thread;
   if((switcher.threads||[]).some(t=>(t.status==='active'||t.lastTurnStatus==='inProgress')&&t.id!==selected?.id))return pause('Více chatů je rozpracovaných. Přepnutí by přerušilo další práci; nejdřív ji dokonči.');
   if(!selected)return pause(resolved.reason);
@@ -53,7 +73,8 @@ export async function automaticSwitch({state,switcher,save,switchAccount,now=Dat
   const legacyAttempt=auto.attempts[window];
   // A legacy record has no turn identity. Only demonstrably newer work may pass.
   const legacyBlocks=legacyAttempt&&!(selected.lastTurnStartedAtMs>legacyAttempt.at);
-  if(auto.attempts[attemptKey]||legacyBlocks){
+  const alreadySent=selected.lastTurnId&&Object.values(auto.attempts).some(a=>a.sourceId===source.id&&a.threadId===selected.id&&a.turnId===selected.lastTurnId);
+  if(auto.attempts[attemptKey]||legacyBlocks||alreadySent){
     setWaiting(null);
     return pause('Tento vyčerpaný limit už vyvolal jeden pokus. Výsledek ověř ručně.');
   }
@@ -64,7 +85,7 @@ export async function automaticSwitch({state,switcher,save,switchAccount,now=Dat
   const target=candidates[0];
   if(!target&&state.slots.some(s=>s.connected&&!s.error&&availability(s,now).status==='exhausted'&&weeklyLimitExhausted(s)&&s.snapshot?.limits.resetCredits>0))return pause('Žádný účet nemá ověřený volný limit. Chcete použít uložený reset? Potvrďte jej na kartě vybraného účtu.');
   if(!target)return pause(auto.waitingContinuation?'Čekající chat je uložený. Jakmile bude dostupný ověřený volný účet, automatika naváže.':'Žádný připojený účet nemá ověřený volný zahrnutý limit.');
-  const attempt={at:now,targetId:target.id,threadId:selected.id,turnId:selected.lastTurnId??null};
+  const attempt={at:now,sourceId:source.id,targetId:target.id,threadId:selected.id,turnId:selected.lastTurnId??null};
   auto.attempts[attemptKey]=attempt;auto.status='switching';auto.message='Přepínám na účet '+target.id+'.';
   setWaiting(null);
   // Persist before any side effect. A restart or unknown result must not resend it.

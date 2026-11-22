@@ -61,7 +61,7 @@ internal static class Program
         }).ToArray();
         var pending=Vault.Data.PendingSwitch;
         return new { ready=Ready, accounts, desktop=Sessions.Current.Available,
-            threads=Sessions.Threads.Select(t=>new {t.Id,t.Title,t.Status,t.Waiting,t.Goal,t.ResumeState,t.LastTurnId,t.LastTurnStatus,t.LastTurnStartedAtMs}),
+            threads=Sessions.Threads.Select(t=>new {t.Id,t.Title,t.Status,t.Waiting,t.Goal,t.ResumeState,t.LastTurnId,t.LastTurnStatus,t.LastTurnStartedAtMs,t.LastTurnErrorCode,t.LastTurnCompletedAtMs}),
             pending=pending==null?null:new { pending.Id, targetEmail=Service.Accounts.SingleOrDefault(a=>a.Key==pending.TargetAccountKey)?.Email,phase=pending.Phase.ToString(), pending.AccountApplied,
                 error=pending.Error==null?null:"Přechod není dokončený. Ověř stav jednotlivých chatů.",
                 chats=pending.Chats.Select(c=>new {c.Id,state=c.ResumeState.ToString(),error=c.Error}) }

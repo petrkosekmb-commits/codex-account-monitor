@@ -7,6 +7,17 @@ internal static class NativeDesktopRegression
 {
     internal static async Task RunAsync()
     {
+        foreach (var scenario in new[] { (Status: "failed", Code: "usageLimitExceeded", Expected: "usageLimitExceeded"),
+            (Status: "completed", Code: "usageLimitExceeded", Expected: (string?)null),
+            (Status: "failed", Code: "networkError", Expected: (string?)null) })
+        {
+            var thread = JsonSerializer.SerializeToElement(new { id = Guid.NewGuid().ToString(), status = new { type = "idle" }, canAcceptDirectInput = true });
+            var turn = JsonSerializer.SerializeToElement(new { id = "synthetic-turn", status = scenario.Status, startedAt = 1700000000L,
+                completedAt = 1700000005L, error = new { codexErrorInfo = scenario.Code, message = "private error text must not be exposed" } });
+            var parsed = NativeDesktopSession.Parse(thread, turn, JsonSerializer.SerializeToElement<object?>(null), "synthetic-owner");
+            Check(parsed.LastTurnErrorCode == scenario.Expected && parsed.LastTurnCompletedAtMs == 1700000005000L,
+                "only explicit failed quota code and completion time are exposed");
+        }
         if (!OperatingSystem.IsWindows()) return;
         var fixture = new Fixture();
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));

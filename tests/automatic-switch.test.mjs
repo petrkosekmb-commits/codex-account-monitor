@@ -145,3 +145,52 @@ test('unknown result remains blocked after restart for the same turn',async()=>{
  x.state.automation=JSON.parse(JSON.stringify(x.state.automation));x.state.automation.enabled=true;
  await automaticSwitch(x.options);assert.equal(x.calls.length,1);
 });
+
+async function witnessedFailure(){
+ const x=setup();x.state.slots[0].error='refresh unavailable';
+ Object.assign(x.switcher.threads[0],{lastTurnId:'witnessed-turn',status:'active',lastTurnStatus:'inProgress'});
+ await automaticSwitch(x.options);assert.equal(x.calls.length,0);
+ x.options.now=now+1000;
+ Object.assign(x.switcher.threads[0],{status:'idle',lastTurnStatus:'failed',lastTurnErrorCode:'usageLimitExceeded',lastTurnCompletedAtMs:now+1000});
+ return x;
+}
+test('witnessed quota failure switches despite unavailable independent source refresh',async()=>{
+ const x=await witnessedFailure();assert.equal(await automaticSwitch(x.options),true);assert.deepEqual(x.calls,[[3,'chat']]);
+});
+for(const reason of ['account','turn','generic-error','old-completion','future-completion','long-gap','cold-start','other-active','newer-completed','recovered-source','unverified-targets'])test(`direct quota evidence does not bypass ${reason}`,async()=>{
+ const x=await witnessedFailure(),t=x.switcher.threads[0];
+ if(reason==='account')x.state.activeEmail=x.state.slots[3].email;
+ if(reason==='turn')t.lastTurnId='different-turn';
+ if(reason==='generic-error')t.lastTurnErrorCode='networkError';
+ if(reason==='old-completion')t.lastTurnCompletedAtMs=now-60000;
+ if(reason==='future-completion')t.lastTurnCompletedAtMs=now+60000;
+ if(reason==='long-gap')x.options.now=now+180000;
+ if(reason==='cold-start')x.state.automation.observedTurns={};
+ if(reason==='other-active')x.switcher.threads.push({id:'other',status:'active',lastTurnStatus:'inProgress',lastTurnStartedAtMs:now+2000});
+ if(reason==='newer-completed')x.switcher.threads.push({id:'other',status:'idle',lastTurnStatus:'completed',lastTurnStartedAtMs:now+2000});
+ if(reason==='recovered-source'){delete x.state.slots[0].error;x.state.slots[0].snapshot.checkedAt=now+2000;x.state.slots[0].snapshot.limits.windows[0].used=10;}
+ if(reason==='unverified-targets'){x.state.slots[1].error='unverified';x.state.slots[2].error='unverified';}
+ // The account case must remain unknown rather than fall back to verified exhaustion.
+ if(reason==='account')x.state.slots[3].error='unverified';
+ await automaticSwitch(x.options);assert.deepEqual(x.calls,[]);
+});
+test('quota failure and later quota snapshot cannot send the same turn twice',async()=>{
+ const x=await witnessedFailure();await automaticSwitch(x.options);delete x.state.slots[0].error;
+ delete x.switcher.threads[0].lastTurnErrorCode;
+ await automaticSwitch(x.options);assert.equal(x.calls.length,1);
+});
+test('witnessed failure waits for verified target across monitor restart',async()=>{
+ const x=await witnessedFailure();x.state.slots[1].error='temporary';x.state.slots[2].error='temporary';
+ await automaticSwitch(x.options);assert.equal(x.calls.length,0);
+ x.state.automation=JSON.parse(JSON.stringify(x.state.automation));x.options.now+=60000;
+ delete x.state.slots[2].error;x.state.slots[2].snapshot.checkedAt=x.options.now;
+ await automaticSwitch(x.options);assert.deepEqual(x.calls,[[3,'chat']]);
+});
+
+test('recovered source permanently retires quota evidence even if its checks later fail',async()=>{
+ const x=await witnessedFailure();x.state.slots[1].error='temporary';x.state.slots[2].error='temporary';
+ await automaticSwitch(x.options);delete x.state.slots[0].error;
+ x.state.slots[0].snapshot.checkedAt=now+2000;x.state.slots[0].snapshot.limits.windows[0].used=20;
+ await automaticSwitch(x.options);x.state.slots[0].error='temporary';delete x.state.slots[2].error;
+ await automaticSwitch(x.options);assert.equal(x.calls.length,0);
+});

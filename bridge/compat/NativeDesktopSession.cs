@@ -145,7 +145,11 @@ internal sealed class NativeDesktopSession : IAsyncDisposable
                 foreach (var item in items.EnumerateArray())
                     if (JsonValue.String(item, "type") == "userMessage") { messageId = JsonValue.String(item, "clientId") ?? JsonValue.String(item, "id"); break; }
         }
-        return new(id, owner, status, waiting, goalStatus, JsonValue.String(thread, "name"), status == "notLoaded" ? "notLoaded" : "resumed", turnId, turnStatus, messageId, started);
+        var quotaError = last.ValueKind == JsonValueKind.Object && turnStatus == "failed" &&
+            last.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.Object &&
+            JsonValue.String(error, "codexErrorInfo") == "usageLimitExceeded" ? "usageLimitExceeded" : null;
+        var completed = last.ValueKind == JsonValueKind.Object ? JsonValue.Long(last, "completedAt") : null;
+        return new(id, owner, status, waiting, goalStatus, JsonValue.String(thread, "name"), status == "notLoaded" ? "notLoaded" : "resumed", turnId, turnStatus, messageId, started, quotaError, completed == null ? null : checked(completed * 1000));
     }
     internal async Task<JsonElement> StartTurnAsync(DesktopThreadState expected, object parameters, CancellationToken cancellation)
     {

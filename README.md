@@ -110,3 +110,7 @@ na [Buy Me a Coffee](https://buymeacoffee.com/kojakcio). Příspěvek není podm
 If this project helps you, you can optionally support its continued development
 and maintenance on [Buy Me a Coffee](https://buymeacoffee.com/kojakcio).
 Contributions are not required to use the project.
+
+## 0.2.28
+
+Automatika rozpozná konkrétní tah, který za jejího sledování selhal kvůli vyčerpání limitu na stále stejném účtu. Tento důkaz může použít i při nedostupné samostatné kontrole zdrojového účtu. Cílový účet musí mít čerstvě ověřený volný limit. Staré chyby, změna účtu, novější práce ani neodeslaný text nejsou pokynem k pokračování. Stejný tah se pod stejným zdrojovým účtem odesílá nejvýše jednou i po změně zdroje důkazu. Resetovací kredity automatika nečerpá.
